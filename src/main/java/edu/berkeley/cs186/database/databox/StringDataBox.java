@@ -55,6 +55,7 @@ public class StringDataBox extends DataBox {
 
     @Override
     public String toString() {
+        //replace "FIX ME" with s
         return s;
     }
 
