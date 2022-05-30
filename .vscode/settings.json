@@ -1,0 +1,23 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "pro1",
+            "database": "${workspaceFolder:CS186-proj1}/lahman.db"
+        },
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "pro1",
+            "database": "${workspaceFolder:CS186-proj1}/lahman.db"
+        },
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "cs186-pro1",
+            "database": "${workspaceFolder:CS186-proj1}/lahman.db"
+        }
+    ],
+    "sqltools.useNodeRuntime": true
+}
