@@ -70,19 +70,41 @@ AS
 -- Question 2i
 CREATE VIEW q2i(namefirst, namelast, playerid, yearid)
 AS
-  SELECT 1, 1, 1, 1 -- replace this line
+  -- SELECT 1, 1, 1, 1 -- replace this line
+  SELECT namefirst,namelast,h.playerID,yearid
+  from HallofFame AS h
+  JOIN people AS p
+  ON (h.playerID=p.playerID)
+  where inducted ="Y"
+  ORDER BY yearid DESC,h.playerID ASC
+
 ;
 
 -- Question 2ii
 CREATE VIEW q2ii(namefirst, namelast, playerid, schoolid, yearid)
 AS
-  SELECT 1, 1, 1, 1, 1 -- replace this line
+  -- SELECT 1, 1, 1, 1, 1 -- replace this line
+  SELECT namefirst,namelast,c.playerID,s.schoolid,q.yearid
+  from q2i q
+  JOIN CollegePlaying AS c
+  ON (q.playerid=c.playerid)
+  JOIN Schools as s
+  ON (s.schoolid=c.schoolid)
+  where schoolState="CA"
+  ORDER BY yearid DESC,s.schoolid ASC,c.playerID ASC
+
 ;
 
 -- Question 2iii
 CREATE VIEW q2iii(playerid, namefirst, namelast, schoolid)
 AS
-  SELECT 1, 1, 1, 1 -- replace this line
+  -- SELECT 1, 1, 1, 1 -- replace this line
+  SELECT q.playerid,namefirst,namelast,c.schoolid
+  from q2i q
+  LEFT OUTER JOIN collegeplaying c
+  ON (c.playerid = q.playerid)
+  ORDER BY q.playerid DESC,c.schoolid ASC
+
 ;
 
 -- Question 3i
