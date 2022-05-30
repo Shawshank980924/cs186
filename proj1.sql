@@ -110,19 +110,47 @@ AS
 -- Question 3i
 CREATE VIEW q3i(playerid, namefirst, namelast, yearid, slg)
 AS
-  SELECT 1, 1, 1, 1, 1 -- replace this line
+  -- SELECT 1, 1, 1, 1, 1 -- replace this line
+  SELECT b.playerid,namefirst,namelast,yearid,
+  1.0*(H-H2B-H3B-HR+2*H2B+3*H3B+4*HR)/AB AS slg
+  from people p
+  JOIN batting b
+  on (p.playerid = b.playerid )
+  where AB>50
+  ORDER BY slg DESC
+  LIMIT 10
 ;
 
 -- Question 3ii
 CREATE VIEW q3ii(playerid, namefirst, namelast, lslg)
 AS
-  SELECT 1, 1, 1, 1 -- replace this line
+  -- SELECT 1, 1, 1, 1 -- replace this line
+  SELECT b.playerid,namefirst,namelast,
+  1.0*sum((H-H2B-H3B-HR+2*H2B+3*H3B+4*HR))/sum(AB) AS lslg
+  from people p
+  JOIN batting b
+  on (p.playerid = b.playerid )
+  GROUP BY b.playerid
+  HAVING sum(AB)>50
+  ORDER BY lslg DESC,b.playerid
+  LIMIT 10
 ;
+
 
 -- Question 3iii
 CREATE VIEW q3iii(namefirst, namelast, lslg)
 AS
-  SELECT 1, 1, 1 -- replace this line
+  -- SELECT 1, 1, 1 -- replace this line
+  SELECT namefirst,namelast,
+  1.0*sum((H-H2B-H3B-HR+2*H2B+3*H3B+4*HR))/sum(AB) AS lslg
+  from people p
+  JOIN batting b
+  on (p.playerid = b.playerid )
+
+  GROUP BY b.playerid
+  HAVING sum(AB)>50 AND lslg>(SELECT 1.0*sum((H-H2B-H3B-HR+2*H2B+3*H3B+4*HR))/sum(AB)
+  FROM batting b
+  where b.playerid="mayswi01")
 ;
 
 -- Question 4i
