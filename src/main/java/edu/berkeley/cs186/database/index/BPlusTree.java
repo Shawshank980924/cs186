@@ -161,7 +161,6 @@ public class BPlusTree {
         typecheck(key);
         // TODO(proj4_integration): Update the following line
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
-
         Optional<RecordId> rid = get(key);
         if (rid.isPresent()) {
             ArrayList<RecordId> l = new ArrayList<>();

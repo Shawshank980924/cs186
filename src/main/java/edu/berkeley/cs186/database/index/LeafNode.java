@@ -148,6 +148,7 @@ class LeafNode extends BPlusNode {
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
 
+
         return null;
     }
 
@@ -376,8 +377,54 @@ class LeafNode extends BPlusNode {
         // Note: LeafNode has two constructors. To implement fromBytes be sure to
         // use the constructor that reuses an existing page instead of fetching a
         // brand new one.
+        /*
+        LeafNode(BPlusTreeMetadata metadata, BufferManager bufferManager, Page page,
+                     List<DataBox> keys,
+                     List<RecordId> rids, Optional<Long> rightSibling, LockContext treeContext)
+         */
+        //已知pageNum需要从bufferManager中取出这个page中的内容，根据构造器
+        // 其中metadata，bufferManager，treeContext已经有了
+        // 还需要得到这个page中存储的keys，rids，rightsibling，page
+        //首先，根据bufferManager获取page和buf
 
-        return null;
+        Page page = bufferManager.fetchPage(treeContext, pageNum);
+        Buffer buf = page.getBuffer();
+        //然后根据序列化的顺序依次取出相应的值的byte值，引用以下前面的注释
+        // When we serialize a leaf node, we write:
+        //
+        //   a. the literal value 1 (1 byte) which indicates that this node is a
+        //      leaf node,
+        //   b. the page id (8 bytes) of our right sibling (or -1 if we don't have
+        //      a right sibling),
+        //   c. the number (4 bytes) of (key, rid) pairs this leaf node contains,
+        //      and
+        //   d. the (key, rid) pairs themselves.
+        //
+        // For example, the following bytes:
+        //
+        //   +----+-------------------------+-------------+----+-------------------------------+
+        //   | 01 | 00 00 00 00 00 00 00 04 | 00 00 00 01 | 03 | 00 00 00 00 00 00 00 03 00 01 |
+        //   +----+-------------------------+-------------+----+-------------------------------+
+        //    \__/ \_______________________/ \___________/ \__________________________________/
+        //     a               b                   c                         d
+        byte nodeType = buf.get();
+        //叶子节点的nodetype区域应为1
+        assert nodeType ==(byte)1;
+        //取出右兄弟节点的page id
+        //若id=-1说明没有rightSibling,否则说明有
+        Optional<Long> rightSibling = Optional.of(buf.getLong());
+        //取出leaf上（key，rid）键值对的个数
+        int n = buf.getInt();
+        //取出该leaf上keys和rids
+        List<DataBox> keys = new ArrayList<>();
+        List<RecordId> rids = new ArrayList<>();
+        //需要注意的是leafnode上面的key和rid是成对出现的，和inner node不同
+        for(int i=0;i<n;i++){
+            keys.add(DataBox.fromBytes(buf,metadata.getKeySchema()));
+            rids.add(RecordId.fromBytes(buf));
+        }
+        //使用正确的构造器返回相应的leafNode
+        return new LeafNode(metadata, bufferManager, page, keys, rids, rightSibling, treeContext);
     }
 
     // Builtins ////////////////////////////////////////////////////////////////
