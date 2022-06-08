@@ -1,254 +1,89 @@
-# RookieDB
+:::info
+💡  第二个proj就正式开始实现数据库管理系统啦！
+这个proj分为4 个task，分别实现
 
-![The official unofficial mascot of the class projects](images/derpydb-small.jpg)
+1. 完成leafNode和innerNode构造器中的关键函数fromBytes
+1. 实现b+tree的增删查操作
+1. 实现b+tree的全遍历和range遍历
+1. 实现b+tree的bulk load，即批量导入构造b+tree
+   :::
 
-## Overview
+## Hints
+> 做之前一定要仔细看代码的注释，尤其是BPlusNode里面的抽象类前的注释，以及项目文档里的图片帮助理解代码
+> Debug可以用tree.toDotPDFFile()需要预先配置[GraphViz](https://graphviz.gitlab.io/download/)环境，打印出b+tree的整体结构
 
-This repo contains my implementation for CS186 RookieDB projects. There is a [gitbook](https://cs186.gitbook.io/project/) for CS186 projects, but it may be updated each semester, so I cloned the 2021 spring version. You can find the projects handout that I used [here](./project-handout).
 
-The master branch contains a bare-bones database implementation, which supports
-executing simple transactions in series. This is the skeleton code you will use throughout the projects. In the assignments of
-this class, you will be adding support for
-B+ tree indices, efficient join algorithms, query optimization, multigranularity
-locking to support concurrent execution of transactions, and database recovery.
+![](https://cdn.nlark.com/yuque/0/2022/png/25488814/1654440038516-cd2cf57c-f01a-498b-9630-143bc31cc169.png?x-oss-process=image%2Fresize%2Cw_1038%2Climit_0#crop=0&crop=0&crop=1&crop=1&from=url&id=bfTiU&margin=%5Bobject%20Object%5D&originHeight=745&originWidth=1038&originalType=binary&ratio=1&rotation=0&showTitle=false&status=done&style=none&title=)
+![image.png](https://cdn.nlark.com/yuque/0/2022/png/25488814/1654704947398-b13a652c-d139-4193-a360-f8872a6cb8c3.png#clientId=u4e563b72-0e1f-4&crop=0&crop=0&crop=1&crop=1&from=paste&height=977&id=ub2bdb52f&margin=%5Bobject%20Object%5D&name=image.png&originHeight=977&originWidth=1918&originalType=binary&ratio=1&rotation=0&showTitle=false&size=80768&status=done&style=none&taskId=u14d73552-d52b-44f1-a72a-085d45eaeb7&title=&width=1918)
 
-## How to use
+## Task 1 LeafNode::fromBytes
 
-My implementation for each project is in the corresponding branch as follows (you can use `git branch -a` to see them), you can `git checkout branch_name` to see my implementation for each project.
+- [x] fromBytes函数具体在做什么
 
-| **Assignment**                                                                                | **Branch name** |
-|-----------------------------------------------------------------------------------------------|---------------------|
-| Skeleton code                                                | Master          |
-| [Project 2: B+ Trees](https://cs186.gitbook.io/project/assignments/proj2)                     | b_plus_tree |
-| [Project 3: Joins and Query Optimization](https://cs186.gitbook.io/project/assignments/proj3) | join_query_opt |
-| [Project 4: Concurrency](https://cs186.gitbook.io/project/assignments/proj4)                  | concurrency |
-| [Project 5: Recovery](https://cs186.gitbook.io/project/assignments/proj5)                     | recovery |
+根据pageNum将每个buffer中储存的每个page（每个page对应一个leafNode或者一个innerNode）中的字节数据反序列化提取成具体的数据结构，最终返回一个leafNode或者inner节点
 
-To start your Rookiedb projects journey, first clone the skeleton code (i.e. master branch) , then follow the instruction below to set up your local development environment. When you  start one specific project, you can create a new branch from master then implement it to keep your code tree clean. 
+- [x] rightSibling和pageNum不要搞混
+> leafNode的一个page中的依次包括以下字节数据
+> // When we serialize a leaf node, we write:
+//
+//   a. the literal value 1 (1 byte) which indicates that this node is a
+//      leaf node,
+//   b. the page id (8 bytes) of our right sibling (or -1 if we don't have
+//      a right sibling),
+//   c. the number (4 bytes) of (key, rid) pairs this leaf node contains,
+//      and
+//   d. the (key, rid) pairs themselves.
 
-## Setting up your local development environment
+page的字节数据存入buffer中后反序列化b得到的是pageNum，pageNum=-1表示右兄弟节点不存在，但是若右兄弟不存在，leafNode.rightSibling = Optional.empty()不是-1
 
-You are free to use any text editor or IDE to complete the assignments, but **we
-will build and test your code in a docker container with Maven**.
+- [x] inner和leafNode的fromByte具体实现不同
 
-We recommend setting up a local development environment by installing Java
-8 locally (the version our Docker container runs) and using an IDE such as
-IntelliJ.
+leafNode中key和recordId是交替出现的，inner是先keys然后chilren
+## Task 2 get, getLeftmostLeaf, put, remove
 
-[Java 8 downloads](http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html)
+- [x] 插入、查找、删除的实现思路
 
-If you have another version of Java installed, it's probably fine to use it, as
-long as you do not use any features not in Java 8. You should run tests
-somewhat frequently inside the container to make sure that your code works with
-our setup.
+这三个实现的思路都差不多，利用了java的动态代理，b+tree的root节点为编译类型是BPlusNode，它的实现类innerNode和leafNode通过重写相同的方法，innerNode递归调用childrenNode的相同方法，而leafNode作为递归调用的出口
 
-To import the project into IntelliJ, make sure that you import as a Maven
-project (select the pom.xml file when importing). Make sure that you can compile
-your code and run tests (it's ok if there are a lot of failed tests - you
-haven't begun implementing anything yet!). You should also make sure that you
-can run the debugger and step through code.
+- [x] 插入时带来的分裂情况需要小心使用sublist方法
 
-## Running tests in IntelliJ
+在使用ArrayList.sublist取出leafNode或者innerNode节点分裂后新page上的key和rid/children需要注意，sublist的元素是原有的list内对象的引用，所以若对之前的list执行remove操作会同时导致sublist中的引用变为空引用，报空指针异常，解决方法是取sublist的同时new：`List<DataBox> newKeys = new ArrayList<>(keys.subList(d,2*d+1))`
 
-If you are using IntelliJ, and wish to run the tests for a given assignment
-follow the instructions in the following document:
+- [x] 注意在leaf节点和inner节点分裂时，split-key 操作不同
+1. leafNode中split-key保留， copy upwards
+1. innerNode中split-key不保留，move upwards
+- [x] remove和put的特殊点
 
-[IntelliJ setup](intellij-test-setup.md)
+这两个属于mutating operation，执行完毕后需要将改动的node同步写入磁盘
+remove操作结束后不需要对b+tree进行rebalance操作
 
-## The code
+- [x] get和put方法的中查找位置的优化
 
-As you will be working with this codebase for the rest of the semester, it is a good idea to get familiar with it. The code is located in the `src/main/java/edu/berkeley/cs186/database` directory, while the tests are located in the `src/test/java/edu/berkeley/cs186/database directory`. The following is a brief overview of each of the major sections of the codebase.
+get方法在inner节点需要找到key对应的chilren指针，代码框架提供了numLessThan和numLessThanEqual，但是用二分法查找可以提高查找效率
+## Task 3 Scans
 
-### cli
+- [x] scanAll和scanGreaterEqual两个方法返回的遍历迭代器必须以lazy的方式对磁盘中的page进行io读入
 
-The cli directory contains all the logic for the database's command line interface. Running the main method of CommandLineInterface.java will create an instance of the database and create a simple text interface that you can send and review the results of queries in. **The inner workings of this section are beyond the scope of the class** (although you're free to look around), you'll just need to know how to run the Command Line Interface.
+根据注释，test中会检查io次数，若在构造迭代器时全遍历了leafNode会带来大量的io消耗，应该在重写迭代器的hasnext中进行判断读入新的leafNode所在的page
 
-#### cli/parser
+- [x] scanGreaterEqual需要通过get先找到key所在的leafNode
 
-The subdirectory cli/parser contains a lot of scary looking code! Don't be intimidated, this is all generated automatically from the file RookieParser.jjt in the root directory of the repo. The code here handles the logic to convert from user inputted queries (strings) into a tree of nodes representing the query (parse tree).
+若直接get leftMostLeaf然后依次迭代也会带来较大的io消耗
+## Task 4: Bulk Load
 
-#### cli/visitor
+- [x] bulk load的流程和与repeatly insert相比的优势
 
-The subdirectory cli/visitor contains classes that help traverse the trees created from the parser and create objects that the database can work with directly.
+流程可以参考以下的ppt链接
+[https://docs.google.com/presentation/d/1_ghdp60NV6XRHnutFAL20k2no6tr2PosXGokYtR8WwU/edit#slide=id.g93b02f7d9b_1_415](https://docs.google.com/presentation/d/1_ghdp60NV6XRHnutFAL20k2no6tr2PosXGokYtR8WwU/edit#slide=id.g93b02f7d9b_1_415)
+简单概括一下就是从左往右，从下到上的顺序依次插入，并且对leafNode给定fullfactor，这样做的好处在于：
 
-### common
+1. 由于数据插入是有序的，所以插入时不需要像task2中put函数需要查找插入的位置，必定是rightMostNode
+1. 一旦分裂之后，分裂之前的结点就不会再次访问，减少了内存反复换页带来的io消耗
+1. 对每个leafNode预留了空位，为之后的插入预留了空间，防止太多的分裂操作影响插入效率
+- [x] fullfactor的一些注意点
 
-The `common` directory contains bits of useful code and general interfaces that
-are not limited to any one part of the codebase.
+fullfactor与2d的乘积向上取整，并且只对leafNode有效，innerNode依然以2d+1作为分裂的判定点
 
-### concurrency
 
-The `concurrency` directory contains a skeleton for adding multigranularity
-locking to the database. You will be implementing this in Project 4.
 
-### databox
-
-Our database has, like most DBMS's, a type system distinct from that of the
-programming language used to implement the DBMS. (Our DBMS doesn't quite provide
-SQL types either, but it's modeled on a simplified version of SQL types).
-
-The `databox` directory contains classes which represents values stored in
-a database, as well as their types. The various `DataBox` classes represent
-values of certain types, whereas the `Type` class represents types used in the
-database.
-
-An example:
-```java
-DataBox x = new IntDataBox(42); // The integer value '42'.
-Type t = Type.intType();        // The type 'int'.
-Type xsType = x.type();         // Get x's type, which is Type.intType().
-int y = x.getInt();             // Get x's value: 42.
-String s = x.getString();       // An exception is thrown, since x is not a string.
-```
-
-### index
-
-The `index` directory contains a skeleton for implementing B+ tree indices. You
-will be implementing this in Project 2.
-
-### memory
-
-The `memory` directory contains classes for managing the loading of data
-into and out of memory (in other words, buffer management).
-
-The `BufferFrame` class represents a single buffer frame (page in the buffer
-pool) and supports pinning/unpinning and reading/writing to the buffer frame.
-All reads and writes require the frame be pinned (which is often done via the
-`requireValidFrame` method, which reloads data from disk if necessary, and then
-returns a pinned frame for the page).
-
-The `BufferManager` interface is the public interface for the buffer manager of
-our DBMS.
-
-The `BufferManagerImpl` class implements a buffer manager using
-a write-back buffer cache with configurable eviction policy. It is responsible
-for fetching pages (via the disk space manager) into buffer frames, and returns
-Page objects to allow for manipulation of data in memory.
-
-The `Page` class represents a single page. When data in the page is accessed or
-modified, it delegates reads/writes to the underlying buffer frame containing
-the page.
-
-The `EvictionPolicy` interface defines a few methods that determine how the
-buffer manager evicts pages from memory when necessary. Implementations of these
-include the `LRUEvictionPolicy` (for LRU) and `ClockEvictionPolicy` (for clock).
-
-### io
-
-The `io` directory contains classes for managing data on-disk (in other words,
-disk space management).
-
-The `DiskSpaceManager` interface is the public interface for the disk space
-manager of our DBMS.
-
-The `DiskSpaceMangerImpl` class is the implementation of the disk space
-manager, which maps groups of pages (partitions) to OS-level files, assigns
-each page a virtual page number, and loads/writes these pages from/to disk.
-
-### query
-
-The `query` directory contains classes for managing and manipulating queries.
-
-The various operator classes are query operators (pieces of a query), some of
-which you will be implementing in Project 3.
-
-The `QueryPlan` class represents a plan for executing a query (which we will be
-covering in more detail later in the semester). It currently executes the query
-as given (runs things in logical order, and performs joins in the order given),
-but you will be implementing
-a query optimizer in Project 3 to run the query in a more efficient manner.
-
-### recovery
-
-The `recovery` directory contains a skeleton for implementing database recovery
-a la ARIES. You will be implementing this in Project 5.
-
-### table
-
-The `table` directory contains classes representing entire tables and records.
-
-The `Table` class is, as the name suggests, a table in our database. See the
-comments at the top of this class for information on how table data is layed out
-on pages.
-
-The `Schema` class represents the _schema_ of a table (a list of column names
-and their types).
-
-The `Record` class represents a record of a table (a single row). Records are
-made up of multiple DataBoxes (one for each column of the table it belongs to).
-
-The `RecordId` class identifies a single record in a table.
-
-
-The `PageDirectory` class is an implementation of a heap file that uses a page directory.
-
-#### table/stats
-
-The `table/stats` directory contains classes for keeping track of statistics of
-a table. These are used to compare the costs of different query plans, when you
-implement query optimization in Project 4.
-
-### Transaction.java
-
-The `Transaction` interface is the _public_ interface of a transaction - it
-contains methods that users of the database use to query and manipulate data.
-
-This interface is partially implemented by the `AbstractTransaction` abstract
-class, and fully implemented in the `Database.Transaction` inner class.
-
-### TransactionContext.java
-
-The `TransactionContext` interface is the _internal_ interface of a transaction -
-it contains methods tied to the current transaction that internal methods
-(such as a table record fetch) may utilize.
-
-The current running transaction's transaction context is set at the beginning
-of a `Database.Transaction` call (and available through the static
-`getCurrentTransaction` method) and unset at the end of the call.
-
-This interface is partially implemented by the `AbstractTransactionContext` abstract
-class, and fully implemented in the `Database.TransactionContext` inner class.
-
-### Database.java
-
-The `Database` class represents the entire database. It is the public interface
-of our database - users of our database can use it like a Java library.
-
-All work is done in transactions, so to use the database, a user would start
-a transaction with `Database#beginTransaction`, then call some of
-`Transaction`'s numerous methods to perform selects, inserts, and updates.
-
-For example:
-```java
-Database db = new Database("database-dir");
-
-try (Transaction t1 = db.beginTransaction()) {
-    Schema s = new Schema()
-            .add("id", Type.intType())
-            .add("firstName", Type.stringType(10))
-            .add("lastName", Type.stringType(10));
-
-    t1.createTable(s, "table1");
-
-    t1.insert("table1", 1, "Jane", "Doe");
-    t1.insert("table1", 2, "John", "Doe");
-
-    t1.commit();
-}
-
-try (Transaction t2 = db.beginTransaction()) {
-    // .query("table1") is how you run "SELECT * FROM table1"
-    Iterator<Record> iter = t2.query("table1").execute();
-
-    System.out.println(iter.next()); // prints [1, John, Doe]
-    System.out.println(iter.next()); // prints [2, Jane, Doe]
-
-    t2.commit();
-}
-
-db.close();
-```
-
-More complex queries can be found in
-[`src/test/java/edu/berkeley/cs186/database/TestDatabase.java`](src/test/java/edu/berkeley/cs186/database/TestDatabase.java).
-
+## 
