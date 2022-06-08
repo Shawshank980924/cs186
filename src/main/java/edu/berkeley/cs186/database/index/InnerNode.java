@@ -81,8 +81,45 @@ class InnerNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
-
-        return null;
+        /**
+         * n.get(k) returns the leaf node on which k may reside when queried from n.
+         * For example, consider the following B+ tree (for brevity, only keys are
+         * shown; record ids are omitted).
+         *
+         *                               inner
+         *                               +----+----+----+----+
+         *                               | 10 | 20 |    |    |
+         *                               +----+----+----+----+
+         *                              /     |     \
+         *                         ____/      |      \____
+         *                        /           |           \
+         *   +----+----+----+----+  +----+----+----+----+  +----+----+----+----+
+         *   |  1 |  2 |  3 |    |->| 11 | 12 | 13 |    |->| 21 | 22 | 23 |    |
+         *   +----+----+----+----+  +----+----+----+----+  +----+----+----+----+
+         *   leaf0                  leaf1                  leaf2
+         *
+         * inner.get(x) should return
+         *
+         *   - leaf0 when x < 10,
+         *   - leaf1 when 10 <= x < 20, and
+         *   - leaf2 when x >= 20.
+         *
+         * Note that inner.get(4) would return leaf0 even though leaf0 doesn't
+         * actually contain 4.
+         */
+        int lft = 0, rgt = keys.size()-1;
+        //二分法找到第一个大于等于key的下标lft
+        //由于java的动态代理this.getChild(lft)返回的BPlusNode在调用get(key)会自动判断这个节点是inner还是leaf node
+        //若是inner node会继续递归调用这个方法
+        //否则会调用leaf node的get方法
+        while(lft<rgt){
+            int mid = (lft+rgt)/2;
+            DataBox midKey = keys.get(mid);
+            if(midKey.compareTo(key)>0)rgt = mid;
+            else if(midKey.compareTo(key)<0)lft = mid+1;
+            else break;
+        }
+        return this.getChild(lft).get(key);
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -90,15 +127,53 @@ class InnerNode extends BPlusNode {
     public LeafNode getLeftmostLeaf() {
         assert(children.size() > 0);
         // TODO(proj2): implement
+        return this.getChild(0).getLeftmostLeaf();
 
-        return null;
     }
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
+        //innerNode 与leafNode节点不同是否插入需要看leafNode插入的返回值来判断
+        //同样首先需要找到第一个比key大的位置
+        int pos = this.BinarySearch(key);
+        System.out.println(key+": "+pos);
+        //然后获取下一层child的BPlusNode递归调用put函数
+        Optional<Pair<DataBox, Long>> pair = this.getChild(pos).put(key, rid);
+        //根据返回的值来判断是否需要加入新的key
+        if(!pair.isPresent())return Optional.empty();
+        //加入新的key和新的children pageNum
+        keys.add(pos,pair.get().getFirst());
+        //由于指针应该指向>=该key的page，所以children的插入位置应该在pos+1
+        children.add(pos+1,pair.get().getSecond());
+        //判断该innerNode是否需要分裂
+        int d = this.metadata.getOrder();
+        //超过2d个key需要进行分裂
+        if(keys.size()==2*d+1){
+            //先分出右边的d+1个元素
+            List<DataBox> newKeys = new ArrayList<>(keys.subList(d,2*d+1));
+            //由于第一个元素之后会上移，所以children指针放在前一半,注意children的元素数量应为2d+1,比keys多一个
+            List<Long> newChilren = new ArrayList<>(children.subList(d+1,2*d+2));
+            //然后将原先的keys和children删除分离出去的元素
+            keys.removeAll(newKeys);
+            children.removeAll(newChilren);
+            //innerNode 对split key的处理和leafNode略有不同,leafNode是copy upward，而innerNode是move upward
+            //移除第一个元素作为split key向上传递
+            DataBox splitKey = newKeys.remove(0);
+            //根据这些newKeys和newRids生成新的InnerNode
+            InnerNode newInnerNode = new InnerNode(metadata, bufferManager, newKeys, newChilren, treeContext);
+            
+            //写入磁盘
+            this.sync();
+            //返回split key以及newLeafNode 的pageNum
+            return Optional.of(new Pair<DataBox, Long>(splitKey,newInnerNode.getPage().getPageNum()));
 
+        }
+
+
+        //若不分裂，写回磁盘以后直接返回empty
+        this.sync();
         return Optional.empty();
     }
 
@@ -115,6 +190,9 @@ class InnerNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
+        //找到第一个大于key的pos
+        Integer pos = BinarySearch(key);
+        getChild(pos).remove(key);
 
         return;
     }
@@ -357,6 +435,19 @@ class InnerNode extends BPlusNode {
             children.add(buf.getLong());
         }
         return new InnerNode(metadata, bufferManager, page, keys, children, treeContext);
+    }
+    //helper //////////////////////////////////////
+    //返回keys中第一个大于等于key的下标
+    public Integer BinarySearch(DataBox key){
+        int lft = 0,rgt = keys.size();
+        while(lft<rgt){
+            int mid = (lft+rgt)/2;
+            DataBox midKey = keys.get(mid);
+            if(midKey.compareTo(key)>0)rgt = mid;
+            else lft = mid+1;
+        }
+        return lft;
+
     }
 
     // Builtins ////////////////////////////////////////////////////////////////

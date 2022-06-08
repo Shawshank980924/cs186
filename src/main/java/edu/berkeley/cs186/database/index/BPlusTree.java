@@ -11,6 +11,7 @@ import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.memory.BufferManager;
 import edu.berkeley.cs186.database.table.RecordId;
 
+import javax.xml.crypto.Data;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -146,8 +147,12 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): implement
+        //获取叶子节点，注意可能是空
+        LeafNode leafNode = this.root.get(key);
+        return leafNode==null?Optional.empty():leafNode.getKey(key);
 
-        return Optional.empty();
+
+
     }
 
     /**
@@ -256,6 +261,21 @@ public class BPlusTree {
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
+        //直接调用root节点的put函数
+        Optional<Pair<DataBox, Long>> pair = this.root.put(key, rid);
+        //若没有返回说明root层没有分裂，直接返回即可
+        if(!pair.isPresent())return;
+        //若有返回需要新的root,需要生成新root的keys和children
+        List<DataBox> keys = new ArrayList<>();
+        List<Long> children = new ArrayList<>();
+        keys.add(pair.get().getFirst());
+        //children左边指向root page，后边指向root分裂产生的新page
+        children.add(root.getPage().getPageNum());
+        children.add(pair.get().getSecond());
+        InnerNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
+        //更新root节点
+        this.updateRoot(newRoot);
+
 
         return;
     }
@@ -306,6 +326,7 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): implement
+        this.root.remove(key);
 
         return;
     }
@@ -435,4 +456,5 @@ public class BPlusTree {
             throw new NoSuchElementException();
         }
     }
+
 }

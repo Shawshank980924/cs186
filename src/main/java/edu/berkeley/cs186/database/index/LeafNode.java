@@ -147,8 +147,44 @@ class LeafNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
-
-
+        /**
+         * n.get(k) returns the leaf node on which k may reside when queried from n.
+         * For example, consider the following B+ tree (for brevity, only keys are
+         * shown; record ids are omitted).
+         *
+         *                               inner
+         *                               +----+----+----+----+
+         *                               | 10 | 20 |    |    |
+         *                               +----+----+----+----+
+         *                              /     |     \
+         *                         ____/      |      \____
+         *                        /           |           \
+         *   +----+----+----+----+  +----+----+----+----+  +----+----+----+----+
+         *   |  1 |  2 |  3 |    |->| 11 | 12 | 13 |    |->| 21 | 22 | 23 |    |
+         *   +----+----+----+----+  +----+----+----+----+  +----+----+----+----+
+         *   leaf0                  leaf1                  leaf2
+         *
+         * inner.get(x) should return
+         *
+         *   - leaf0 when x < 10,
+         *   - leaf1 when 10 <= x < 20, and
+         *   - leaf2 when x >= 20.
+         *
+         * Note that inner.get(4) would return leaf0 even though leaf0 doesn't
+         * actually contain 4.
+         */
+        //先引用相关注释
+        //需要注意的是这是leafNode自己调用自己的方法，这里需要判断这个key是否真的存在于这个leaf page上
+        //这里采用二分法查找这个key是否存在于这个leaf page上
+        int lft = 0, rgt = keys.size()-1;
+        while(lft<=rgt){
+            if(lft==rgt)return keys.get(lft).equals(key)? this:null;
+            int mid = (lft+rgt)/2;
+            DataBox midKey = keys.get(mid);
+            if(midKey.compareTo(key)>0)rgt=mid-1;
+            else if(midKey.compareTo(key)<0)lft=mid+1;
+            else return this;
+        }
         return null;
     }
 
@@ -156,15 +192,46 @@ class LeafNode extends BPlusNode {
     @Override
     public LeafNode getLeftmostLeaf() {
         // TODO(proj2): implement
-
-        return null;
+        return this;
     }
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
+        //在leafNode上插入一对key rid键值对
+        //我们需要做以下几件事
+        //1.找到插入的位置，判断是否有相同的key，若有雷同，抛出错误
+        //2.判断key的数量是否达到了2d+1,达到了需要进行分裂操作
+        //3.若不分裂直接返回option.empty，若分裂后需要向inner节点返回(split key, right-leafNode-pageNum)
+        //4. 调用sync函数同步写入磁盘中
+        if(this.getKey(key).isPresent())throw new BPlusTreeException(String.format("key: %s already existed", key.toString()));
+        //二分法找到第一个比它的大的值
+        int pos = this.BinarySearch(key);
+        System.out.println(key+" "+pos);
+        keys.add(pos,key);
+        rids.add(pos,rid);
+        //判断是否需要分裂leafNode， 即key的数量是否超过了2d
+        int d = this.metadata.getOrder();
+        if(keys.size()==d*2+1){
+            //先分出右边的d+1个元素
+            List<DataBox> newKeys = new ArrayList<>(keys.subList(d,2*d+1));
+            List<RecordId> newRids = new ArrayList<>(rids.subList(d,2*d+1));
+            //然后将原先的keys和rids删除分离出去的元素
+            keys.removeAll(newKeys);
+            rids.removeAll(newRids);
+            //根据这些newKeys和newRids生成新的leafNode
+            LeafNode newLeafNode = new LeafNode(metadata, bufferManager, newKeys, newRids, this.rightSibling, treeContext);
 
+            //重置leafpage的rightsibling
+            this.rightSibling = Optional.of(newLeafNode.page.getPageNum());
+            //写入磁盘
+            this.sync();
+            //返回split key以及newLeafNode 的pageNum
+            return Optional.of(new Pair<>(newLeafNode.getKeys().get(0),newLeafNode.page.getPageNum() ));
+        }
+        //若不用分裂，写入磁盘后直接返回empty
+        this.sync();
         return Optional.empty();
     }
 
@@ -181,6 +248,12 @@ class LeafNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
+        //找到对应的key的下标删除即可
+        int index = keys.indexOf(key);
+        keys.remove(index);
+        rids.remove(index);
+        //写回磁盘
+        sync();
 
         return;
     }
@@ -426,6 +499,20 @@ class LeafNode extends BPlusNode {
         //使用正确的构造器返回相应的leafNode
         return new LeafNode(metadata, bufferManager, page, keys, rids, rightSibling, treeContext);
     }
+    //helper //////////////////////////////////////
+    //返回keys中第一个大于等于key的下标
+    public Integer BinarySearch(DataBox key){
+        int lft = 0,rgt = keys.size();
+
+        while(lft<rgt){
+            int mid = (lft+rgt)/2;
+            DataBox midKey = keys.get(mid);
+            if(midKey.compareTo(key)>0)rgt = mid;
+            else lft = mid+1;
+        }
+        return lft;
+
+    }
 
     // Builtins ////////////////////////////////////////////////////////////////
     @Override
@@ -447,4 +534,5 @@ class LeafNode extends BPlusNode {
     public int hashCode() {
         return Objects.hash(page.getPageNum(), keys, rids, rightSibling);
     }
+
 }
