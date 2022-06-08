@@ -175,8 +175,37 @@ class InnerNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
-
-        return Optional.empty();
+        int d = this.metadata.getOrder();
+        //取出最右边的children 对应的Node
+        BPlusNode childNode = this.getChild(this.getKeys().size());
+        //向下层进行递归调用
+        Optional<Pair<DataBox, Long>> pair = childNode.bulkLoad(data, fillFactor);
+        //若没有返回说明childNode没有分裂，直接返回空
+        if(!pair.isPresent())return Optional.empty();
+        //若有返回，则需要在当前的inner Node中插入新的key
+        this.getKeys().add(pair.get().getFirst());
+        this.getChildren().add(pair.get().getSecond());
+        //判断当前的节点是否需要分裂,不需要分裂直接返回，注意inner Node的分裂边界是2d+1
+        if(this.getKeys().size()<=2*d){
+            //写入磁盘
+            sync();
+            return Optional.empty();
+        }
+        //需要分裂，左边d右边d+1，右边第一个元素move upward
+        //先分出右边的d+1个元素
+        List<DataBox> newKeys = new ArrayList<>(keys.subList(d,2*d+1));
+        //由于第一个元素之后会上移，所以children指针放在前一半,注意children的元素数量应为2d+1,比keys多一个
+        List<Long> newChilren = new ArrayList<>(children.subList(d+1,2*d+2));
+        //然后将原先的keys和children删除分离出去的元素
+        keys.removeAll(newKeys);
+        children.removeAll(newChilren);
+        //innerNode 对split key的处理和leafNode略有不同,leafNode是copy upward，而innerNode是move upward
+        //移除第一个元素作为split key向上传递
+        DataBox splitKey = newKeys.remove(0);
+        //根据这些newKeys和newRids生成新的InnerNode
+        InnerNode newInnerNode = new InnerNode(metadata, bufferManager, newKeys, newChilren, treeContext);
+        //用Optional封装后传回上层调用者
+        return Optional.of(new Pair<DataBox,Long>(splitKey,newInnerNode.getPage().getPageNum()));
     }
 
     // See BPlusNode.remove.

@@ -174,18 +174,8 @@ class LeafNode extends BPlusNode {
          * actually contain 4.
          */
         //先引用相关注释
-        //需要注意的是这是leafNode自己调用自己的方法，这里需要判断这个key是否真的存在于这个leaf page上
-//        //这里采用二分法查找这个key是否存在于这个leaf page上
-//        int lft = 0, rgt = keys.size()-1;
-//        while(lft<=rgt){
-//            if(lft==rgt)return keys.get(lft).equals(key)? this:null;
-//            int mid = (lft+rgt)/2;
-//            DataBox midKey = keys.get(mid);
-//            if(midKey.compareTo(key)>0)rgt=mid-1;
-//            else if(midKey.compareTo(key)<0)lft=mid+1;
-//            else return this;
-//        }
-//        return null;
+        //需要注意的是这是put函数调用的base情况，这里不需要判断这个key是否真的存在于这个leaf page上直接返回即可
+
         return this;
     }
 
@@ -241,8 +231,30 @@ class LeafNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
-
-        return Optional.empty();
+        //根据fillfactor和d计算leafNode的最大容纳量
+        int fullNum = (int)Math.ceil(2*this.metadata.getOrder()*fillFactor);
+        Pair<DataBox, RecordId> pair = data.next();
+        //判断当前keys是否达到了fullNum
+        if(this.getKeys().size()<fullNum){
+            //插入新的key和recordId
+            this.getKeys().add(pair.getFirst());
+            this.getRids().add(pair.getSecond());
+            sync();
+            return Optional.empty();
+        }
+        //当前keys达到了fullNum需要增加新的leafNode
+        //注意新的leafNode只插入一个(key,rid)
+        List<DataBox> newKeys = new ArrayList<>();
+        List<RecordId> newRids = new ArrayList<>();
+        newKeys.add(pair.getFirst());
+        newRids.add(pair.getSecond());
+        //创建新的leafNode
+        LeafNode newLeafNode = new LeafNode(metadata, bufferManager, newKeys, newRids, this.rightSibling, treeContext);
+        //改动当前的leafNode的rightSibling
+        this.rightSibling = Optional.of(newLeafNode.getPage().getPageNum());
+        //写入磁盘
+        sync();
+        return Optional.of(new Pair<DataBox,Long>(pair.getFirst(),this.rightSibling.get()));
     }
 
     // See BPlusNode.remove.

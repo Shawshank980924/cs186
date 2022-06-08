@@ -306,6 +306,24 @@ public class BPlusTree {
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
+        //判断当前的树是否是空的，非空的话抛出异常
+        if(!root.getLeftmostLeaf().getKeys().isEmpty())throw new BPlusTreeException("tree is not empty!");
+        //当data.hasNext()为true时对root节点循环调用bulkload函数
+        while(data.hasNext()){
+            Optional<Pair<DataBox, Long>> pair = root.bulkLoad(data, fillFactor);
+            //若没有返回值说明下层没有分裂直接返回
+            if(!pair.isPresent())return;
+            //若有返回值，说明root分裂了，需要新的root节点
+            List<DataBox> keys = new ArrayList<>();
+            List<Long> children = new ArrayList<>();
+            keys.add(pair.get().getFirst());
+            //children左边指向root page，右边指向root分裂产生的新page
+            children.add(root.getPage().getPageNum());
+            children.add(pair.get().getSecond());
+            InnerNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
+            //更新root节点
+            this.updateRoot(newRoot);
+        }
 
         return;
     }
