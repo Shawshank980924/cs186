@@ -208,7 +208,7 @@ class LeafNode extends BPlusNode {
         if(this.getKey(key).isPresent())throw new BPlusTreeException(String.format("key: %s already existed", key.toString()));
         //二分法找到第一个比它的大的值
         int pos = this.BinarySearch(key);
-        System.out.println(key+" "+pos);
+//        System.out.println(key+" "+pos);
         keys.add(pos,key);
         rids.add(pos,rid);
         //判断是否需要分裂leafNode， 即key的数量是否超过了2d
@@ -485,7 +485,8 @@ class LeafNode extends BPlusNode {
         assert nodeType ==(byte)1;
         //取出右兄弟节点的page id
         //若id=-1说明没有rightSibling,否则说明有
-        Optional<Long> rightSibling = Optional.of(buf.getLong());
+        Long pid = buf.getLong();
+        Optional<Long> rightSibling =pid==-1L? Optional.empty():Optional.of(pid);
         //取出leaf上（key，rid）键值对的个数
         int n = buf.getInt();
         //取出该leaf上keys和rids

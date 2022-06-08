@@ -438,10 +438,13 @@ public class TestBPlusTree {
                 BPlusTree tree = getBPlusTree(Type.intType(), d);
                 for (int i = 0; i < keys.size(); ++i) {
                     tree.put(keys.get(i), rids.get(i));
+
                 }
+//                tree.toDotPDFFile("tree.pdf");
 
                 // Test get.
                 for (int i = 0; i < keys.size(); ++i) {
+//                    System.out.println(i);
                     assertEquals(Optional.of(rids.get(i)), tree.get(keys.get(i)));
                 }
 
@@ -469,6 +472,18 @@ public class TestBPlusTree {
             }
         }
     }
+    @Test
+    public void iteratorTest(){
+        List<Integer> list = new ArrayList<>();
+        list.add(1);
+        list.add(2);
+        list.add(3);
+        Iterator<Integer> it1 = list.iterator();
+        Iterator<Integer> it2 =list.iterator();
+        it1.next();
+        System.out.println(it2.next());
+    }
+
 
     @Test
     @Category(SystemTests.class)

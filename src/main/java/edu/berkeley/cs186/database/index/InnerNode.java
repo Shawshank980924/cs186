@@ -107,19 +107,12 @@ class InnerNode extends BPlusNode {
          * Note that inner.get(4) would return leaf0 even though leaf0 doesn't
          * actually contain 4.
          */
-        int lft = 0, rgt = keys.size()-1;
         //二分法找到第一个大于等于key的下标lft
         //由于java的动态代理this.getChild(lft)返回的BPlusNode在调用get(key)会自动判断这个节点是inner还是leaf node
         //若是inner node会继续递归调用这个方法
         //否则会调用leaf node的get方法
-        while(lft<rgt){
-            int mid = (lft+rgt)/2;
-            DataBox midKey = keys.get(mid);
-            if(midKey.compareTo(key)>0)rgt = mid;
-            else if(midKey.compareTo(key)<0)lft = mid+1;
-            else break;
-        }
-        return this.getChild(lft).get(key);
+        int pos = this.BinarySearch(key);
+        return this.getChild(pos).get(key);
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -138,7 +131,7 @@ class InnerNode extends BPlusNode {
         //innerNode 与leafNode节点不同是否插入需要看leafNode插入的返回值来判断
         //同样首先需要找到第一个比key大的位置
         int pos = this.BinarySearch(key);
-        System.out.println(key+": "+pos);
+//        System.out.println(key+": "+pos);
         //然后获取下一层child的BPlusNode递归调用put函数
         Optional<Pair<DataBox, Long>> pair = this.getChild(pos).put(key, rid);
         //根据返回的值来判断是否需要加入新的key

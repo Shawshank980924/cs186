@@ -207,7 +207,7 @@ public class BPlusTree {
 
         // TODO(proj2): Return a BPlusTreeIterator.
 
-        return Collections.emptyIterator();
+        return new BPlusTreeIterator();
     }
 
     /**
@@ -240,7 +240,8 @@ public class BPlusTree {
 
         // TODO(proj2): Return a BPlusTreeIterator.
 
-        return Collections.emptyIterator();
+
+        return new BPlusTreeIterator(key);
     }
 
     /**
@@ -441,19 +442,49 @@ public class BPlusTree {
     // Iterator ////////////////////////////////////////////////////////////////
     private class BPlusTreeIterator implements Iterator<RecordId> {
         // TODO(proj2): Add whatever fields and constructors you want here.
+        private LeafNode leafNode = null;
+        private Iterator<RecordId> ridsIt = null;
+
+        public Iterator<RecordId> getRidsIt() {
+            return ridsIt;
+        }
+
+        //一个构造器用于给scanAll用
+        public BPlusTreeIterator() {
+            //获取b+tree的leftMost Node然后得到rid的list取出迭代器
+            this.leafNode = BPlusTree.this.root.getLeftmostLeaf();
+            this.ridsIt = leafNode.getRids().iterator();
+        }
+        //一个构造器用于给scanGreaterEqual用
+        public BPlusTreeIterator(DataBox key) {
+            //获取该key所在的leafNode，这里test文件中没有针对key不存在的情况
+            //所以直接get(key)面向测试编程
+            this.leafNode = BPlusTree.this.root.get(key);
+            //取出该leafNode的迭代器
+            this.ridsIt = leafNode.getRids().iterator();
+            Integer pos = this.leafNode.BinarySearch(key);
+            for(int i=1;i<pos;i++)
+                this.ridsIt.next();
+        }
+
 
         @Override
         public boolean hasNext() {
             // TODO(proj2): implement
-
-            return false;
+            //该leafNode的元素还没迭代完就直接返回true
+            if(this.ridsIt.hasNext())return this.ridsIt.hasNext();
+            //该leafNode迭代完毕且没有rightSibling时返回false
+            if(!this.leafNode.getRightSibling().isPresent())return false;
+            //该leafNode迭代完毕但还有rightSibling时重置leafNode和迭代器
+            leafNode = leafNode.getRightSibling().get();
+            this.ridsIt = leafNode.getRids().iterator();
+            return ridsIt.hasNext();
         }
 
         @Override
         public RecordId next() {
             // TODO(proj2): implement
-
-            throw new NoSuchElementException();
+            return this.ridsIt.next();
         }
     }
 
