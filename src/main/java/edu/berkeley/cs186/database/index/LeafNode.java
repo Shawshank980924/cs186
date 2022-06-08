@@ -175,17 +175,18 @@ class LeafNode extends BPlusNode {
          */
         //先引用相关注释
         //需要注意的是这是leafNode自己调用自己的方法，这里需要判断这个key是否真的存在于这个leaf page上
-        //这里采用二分法查找这个key是否存在于这个leaf page上
-        int lft = 0, rgt = keys.size()-1;
-        while(lft<=rgt){
-            if(lft==rgt)return keys.get(lft).equals(key)? this:null;
-            int mid = (lft+rgt)/2;
-            DataBox midKey = keys.get(mid);
-            if(midKey.compareTo(key)>0)rgt=mid-1;
-            else if(midKey.compareTo(key)<0)lft=mid+1;
-            else return this;
-        }
-        return null;
+//        //这里采用二分法查找这个key是否存在于这个leaf page上
+//        int lft = 0, rgt = keys.size()-1;
+//        while(lft<=rgt){
+//            if(lft==rgt)return keys.get(lft).equals(key)? this:null;
+//            int mid = (lft+rgt)/2;
+//            DataBox midKey = keys.get(mid);
+//            if(midKey.compareTo(key)>0)rgt=mid-1;
+//            else if(midKey.compareTo(key)<0)lft=mid+1;
+//            else return this;
+//        }
+//        return null;
+        return this;
     }
 
     // See BPlusNode.getLeftmostLeaf.
