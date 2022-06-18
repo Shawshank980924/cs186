@@ -87,6 +87,16 @@ public class BNLJOperator extends JoinOperator {
          */
         private void fetchNextLeftBlock() {
             // TODO(proj3_part1): implement
+            //从磁盘中取出B-2个page作为一个block放在内存页中，并通过QueryOperator#getBlockIterator返回该block的一个迭代器
+
+            //调用QueryOperator的静态方法 赋给leftBlockIterator,注意最大的page页数b-2
+            this.leftBlockIterator =  QueryOperator.getBlockIterator(this.leftSourceIterator, BNLJOperator.this.getLeftSource().getSchema(),numBuffers-2 );
+            this.leftBlockIterator.markNext();
+            //leftRecord 置为第一个record
+            if(this.leftBlockIterator.hasNext())this.leftRecord = this.leftBlockIterator.next();
+            else this.leftRecord=null;
+            // this.leftRecord = this.leftBlockIterator.next();
+            
         }
 
         /**
@@ -101,6 +111,9 @@ public class BNLJOperator extends JoinOperator {
          */
         private void fetchNextRightPage() {
             // TODO(proj3_part1): implement
+            //前一个的特殊情况把maxpages改为1即可
+            this.rightPageIterator = QueryOperator.getBlockIterator(this.rightSourceIterator, BNLJOperator.this.getRightSource().getSchema(),1);
+            this.rightPageIterator.markNext();
         }
 
         /**
@@ -113,7 +126,61 @@ public class BNLJOperator extends JoinOperator {
          */
         private Record fetchNextRecord() {
             // TODO(proj3_part1): implement
-            return null;
+            //把proj的注释copy过来，提示有四种情况需要处理
+            // Case 1: The right page iterator has a value to yield
+            // Case 2: The right page iterator doesn't have a value to yield but the left block iterator does
+            // Case 3: Neither the right page nor left block iterators have values to yield, but there's more right pages
+            // Case 4: Neither right page nor left block iterators have values nor are there more right pages, but there are still left blocks
+            // if (leftRecord == null) {
+            //     // The left source was empty, nothing to fetch
+            //     return null;
+            // }
+            while(true){
+                //第一种情况，一个page内的record还没遍历完
+                if(this.rightPageIterator.hasNext()){
+                    Record rightRecord = rightPageIterator.next();
+                    if (compare(leftRecord, rightRecord) == 0) {
+                        return leftRecord.concat(rightRecord);
+                    }
+
+                }
+                //第二种情况，一个page遍历完了，但是左边block还没遍历完
+                //左边的block next，右边的page reset重头遍历
+                else if(this.leftBlockIterator.hasNext()){
+                    leftRecord = leftBlockIterator.next();
+                    rightPageIterator.reset();
+                    continue;
+
+                }
+                
+                else{
+                    //第三种情况，block里面的每个record都访问了右边的page中的所有record，右边还能fetchNextPage
+                    //重置左边block的迭代器，直接进入下一个循环
+                    fetchNextRightPage();
+                    if(this.rightPageIterator.hasNext()){
+                        leftBlockIterator.reset();
+                        //leftRecord需要手动重置
+                        leftRecord = leftBlockIterator.next();
+                        continue;
+                    }
+                    //第四种情况，block中的所有record都访问了右边所有page的record，但是左边还能fetchNextBlock
+                    else{
+                        fetchNextLeftBlock();
+                        if(leftRecord!=null){
+                            //重置右边的record迭代器以及page迭代器到第一个page上
+                            this.rightSourceIterator.reset();
+                            fetchNextRightPage();
+                            continue;
+                        }
+                        //第五种情况，join操作结束
+                        else{
+                            return null;
+                        }
+                    }
+
+                }
+
+            }
         }
 
         /**

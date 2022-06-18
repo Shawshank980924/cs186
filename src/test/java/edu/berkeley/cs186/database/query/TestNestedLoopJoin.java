@@ -305,8 +305,12 @@ public class TestNestedLoopJoin {
             Record expectedRecord = new Record(true, 1, "a", 1.2f, true, 1, "a", 1.2f);
 
             while (outputIterator.hasNext() && numRecords < 100 * 100) {
+                // System.out.println(numRecords);
                 assertEquals("mismatch at record " + numRecords, expectedRecord, outputIterator.next());
                 numRecords++;
+                // if(numRecords>=100){
+                //     System.out.println("100");
+                // }
             }
             checkIOs(0);
 
