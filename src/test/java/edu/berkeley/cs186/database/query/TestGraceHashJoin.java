@@ -53,28 +53,32 @@ public class TestGraceHashJoin {
             List<Record> leftRecords = new ArrayList<>();
             List<Record> rightRecords = new ArrayList<>();
             Set<Record> expectedOutput = new HashSet<>();
-
+            //left join数据0~9
             for (int i = 0; i < 10; i++) {
                 Record r = TestUtils.createRecordWithAllTypesWithValue(i);
                 leftRecords.add(r);
             }
 
+            //right join数据5~14
             for (int i = 5; i < 15; i++) {
                 Record r = TestUtils.createRecordWithAllTypesWithValue(i);
                 rightRecords.add(r);
             }
 
+            //期望输出5~9
             for (int i = 5; i < 10; i++) {
                 Record r = TestUtils.createRecordWithAllTypesWithValue(i);
                 expectedOutput.add(r.concat(r));
             }
 
+            //构造SHJOOperator
             SHJOperator shj = new SHJOperator(
                 new TestSourceOperator(leftRecords, schema),
                 new TestSourceOperator(rightRecords, schema),
                 "int", "int", transaction.getTransactionContext()
             );
 
+            
             Set<Record> output = new HashSet<>();
             for (Record record : shj) output.add(record);
 
@@ -174,7 +178,10 @@ public class TestGraceHashJoin {
             );
 
             List<Record> output = new ArrayList<>();
-            for (Record record: ghj) output.add(record);
+            for (Record record: ghj){
+                output.add(record);
+                // System.out.println(record);
+            } 
 
             assertEquals(1674, output.size());
 
@@ -241,6 +248,7 @@ public class TestGraceHashJoin {
                     .add("int", Type.intType())
                     .add("string", Type.stringType(500));
             Pair<List<Record>, List<Record>> inputs = GHJOperator.getBreakGHJInputs();
+            System.out.println("input ok");
 
             List<Record> leftRecords = inputs.getFirst();
             List<Record> rightRecords = inputs.getSecond();
@@ -251,10 +259,14 @@ public class TestGraceHashJoin {
                 "int", "int",
                 transaction.getTransactionContext()
             );
+            System.out.println("ghj is ready");
 
             try {
                 Iterator<Record> records = ghj.iterator();
-                while(records.hasNext()) records.next();
+                while(records.hasNext()) {
+                    System.out.println(records.next());
+                    // records.next();
+                }
                 fail("GHJ Worked! It shouldn't have...");
             } catch (Exception e) {
                 assertEquals("GHJ Failed for the wrong reason...",

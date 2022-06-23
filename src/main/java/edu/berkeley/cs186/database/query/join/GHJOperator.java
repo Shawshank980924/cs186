@@ -71,6 +71,20 @@ public class GHJOperator extends JoinOperator {
         // You may find the implementation in SHJOperator.java to be a good
         // starting point. You can use the static method HashFunc.hashDataBox
         // to get a hash value.
+        //对于特定的pass阶段的的records进行hash分区为B-1个分区
+        for (Record record: records) {
+            // Partition left records on the chosen column
+            DataBox columnValue;
+            if(left==true)columnValue = record.getValue(getLeftColumnIndex());
+            else columnValue = record.getValue(getRightColumnIndex());
+            int hash = HashFunc.hashDataBox(columnValue, pass);
+            // modulo to get which partition to use
+            int partitionNum = hash % partitions.length;
+            if (partitionNum < 0)  // hash might be negative
+                partitionNum += partitions.length;
+            partitions[partitionNum].add(record);
+        }
+
         return;
     }
 
@@ -112,6 +126,36 @@ public class GHJOperator extends JoinOperator {
         // You shouldn't refer to any variable starting with "left" or "right"
         // here, use the "build" and "probe" variables we set up for you.
         // Check out how SHJOperator implements this function if you feel stuck.
+        Map<DataBox, List<Record>> hashTable = new HashMap<>();
+        //首先是build阶段，将buildRecords依次写入hashTable中
+        for(Record record: buildRecords){
+            //取出join的字段值
+            DataBox joinValue = record.getValue(buildColumnIndex);
+            if(!hashTable.containsKey(joinValue)){
+                hashTable.put(joinValue, new ArrayList<>());
+            }
+            hashTable.get(joinValue).add(record);
+        }
+        //然后是probe阶段，将probe partition中的Records依次取出，与相应的key对于的list中依次join
+        for(Record probeRecord:probeRecords){
+            DataBox joinValue = probeRecord.getValue(probeColumnIndex);
+            //该key 在hashTable中不存在则直接continue
+            if(!hashTable.containsKey(joinValue)){
+                continue;
+            }
+            for(Record buildRecord : hashTable.get(joinValue)){
+                //需要注意的是concat的顺序必须是left concat right，所以必须使用probefirst来进行判断
+                if(probeFirst==false){
+                    Record joinedRecord = buildRecord.concat(probeRecord);
+                    this.joinedRecords.add(joinedRecord);
+                }
+                else{
+                    Record joinedRecord = probeRecord.concat(buildRecord);
+                    this.joinedRecords.add(joinedRecord);
+                }
+                
+            }
+        }
     }
 
     /**
@@ -131,11 +175,19 @@ public class GHJOperator extends JoinOperator {
         // Partition records into left and right
         this.partition(leftPartitions, leftRecords, true, pass);
         this.partition(rightPartitions, rightRecords, false, pass);
-
         for (int i = 0; i < leftPartitions.length; i++) {
             // TODO(proj3_part1): implement the rest of grace hash join
             // If you meet the conditions to run the build and probe you should
             // do so immediately. Otherwise you should make a recursive call.
+            if(leftPartitions[i].getNumPages()<=this.numBuffers-2||rightPartitions[i].getNumPages()<=this.numBuffers-2){
+                //左分区和右分区只要有一个符合即可
+                this.buildAndProbe(leftPartitions[i], rightPartitions[i]);
+
+            }
+            else{
+                //若全部不符合，recursive call run func
+                run(leftPartitions[i], rightPartitions[i], pass+1);
+            }
         }
     }
 
@@ -200,9 +252,19 @@ public class GHJOperator extends JoinOperator {
     public static Pair<List<Record>, List<Record>> getBreakSHJInputs() {
         ArrayList<Record> leftRecords = new ArrayList<>();
         ArrayList<Record> rightRecords = new ArrayList<>();
-
+        //就是要生成一个test类一个pass内不能满足hash分区，但是在5个pass内可以满足
+        //每个page有8个records，有个分区会超过4个page也就是说，分配给该分区的超过32个record即可
+        //当总的records数量超过32*5=160时至少有个分区超过32个record，也就是说shj会失灵
         // TODO(proj3_part1): populate leftRecords and rightRecords such that
         // SHJ breaks when trying to join them but not GHJ
+        for(int i=0;i<=186;i++){
+            leftRecords.add(createRecord(i));
+            rightRecords.add(createRecord(i));
+            
+        }
+
+
+
         return new Pair<>(leftRecords, rightRecords);
     }
 
@@ -223,8 +285,14 @@ public class GHJOperator extends JoinOperator {
         ArrayList<Record> leftRecords = new ArrayList<>();
         ArrayList<Record> rightRecords = new ArrayList<>();
         // TODO(proj3_part1): populate leftRecords and rightRecords such that GHJ breaks
+        //相同的key出现超过32次就gg
+        for(int i=0;i<33;i++){
+            leftRecords.add(createRecord(186));
+            rightRecords.add(createRecord(186));
+        }
 
         return new Pair<>(leftRecords, rightRecords);
     }
+
 }
 
