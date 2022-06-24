@@ -1,7 +1,9 @@
 package edu.berkeley.cs186.database.query.join;
 
 import edu.berkeley.cs186.database.TransactionContext;
+import edu.berkeley.cs186.database.common.HashFunc;
 import edu.berkeley.cs186.database.common.iterator.BacktrackingIterator;
+import edu.berkeley.cs186.database.databox.DataBox;
 import edu.berkeley.cs186.database.query.JoinOperator;
 import edu.berkeley.cs186.database.query.MaterializeOperator;
 import edu.berkeley.cs186.database.query.QueryOperator;
@@ -140,7 +142,129 @@ public class SortMergeOperator extends JoinOperator {
          */
         private Record fetchNextRecord() {
             // TODO(proj3_part1): implement
-            return null;
+            //left和right有一个为null直接返回null
+            if(leftRecord == null||rightRecord == null){
+                return null;
+            }
+            while(true){
+                DataBox leftKey = leftRecord.getValue(getLeftColumnIndex());
+                DataBox rightKey = rightRecord.getValue(getRightColumnIndex());
+                //左右均有下一个的情况
+                if(leftIterator.hasNext()&& rightIterator.hasNext()){
+                    if(leftKey.compareTo(rightKey)==0){
+                        //若对leftKey第一次找到rightKey达到相等，则需要标记rightIterator的位置
+                        if(marked == false){
+                            marked =true;
+                            rightIterator.markPrev();
+                        }
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        //只推进rightIterator
+                        rightRecord = rightIterator.next();
+                        return joinedRecord;
+                    }
+                    else{
+                        //不相等的情况首先判断marked
+                        if(marked == true){
+                            //重置mark，right跳回标记处，left next
+                            leftRecord = leftIterator.next();
+                            rightIterator.reset();
+                            rightRecord = rightIterator.next();
+                            marked = false;
+                            continue;
+                        }
+                        //左边比右边小，左边next
+                        if(leftKey.compareTo(rightKey)<0){
+                            leftRecord = leftIterator.next();
+                        }
+                        //右边比左边小，右边next
+                        else if(leftKey.compareTo(rightKey)>0){
+                            rightRecord = rightIterator.next();
+                        }
+                    }
+
+                }
+                else if(leftIterator.hasNext()){
+                    //右边没有record的了，但是左边还有
+                    if(leftKey.compareTo(rightKey)==0){
+                        //因为右边没有record了，直接跳回标记处，left next
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        leftRecord = leftIterator.next();
+                        rightIterator.reset();
+                        rightRecord = rightIterator.next();
+                        // rightRecord = rightIterator.next();
+                        return joinedRecord;
+                    }
+                    else{
+                        if(marked == true){
+                            //这里和上面的情况相同相同
+                            leftRecord = leftIterator.next();
+                            rightIterator.reset();
+                            rightRecord = rightIterator.next();
+                            marked = false;
+                            continue;
+                        }
+                        //左边比右边小，左边next
+                        if(leftKey.compareTo(rightKey)<0){
+                            leftRecord = leftIterator.next();
+                        }
+                        //右边比左边小，因为右边不能再推进了，直接返回null
+                        else if(leftKey.compareTo(rightKey)>0){
+                            // rightRecord = rightIterator.next();
+                            rightRecord = null;
+                            return null;
+                        }
+                    }
+                }
+                else if(rightIterator.hasNext()){
+                    //右边还有，左边没了
+                    if(leftKey.compareTo(rightKey)==0){
+                        //同左右都有的情况
+                        if(marked == false){
+                            marked =true;
+                            rightIterator.markPrev();
+                        }
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        rightRecord = rightIterator.next();
+                        return joinedRecord;
+                    }
+                    else{
+                        //不相等时，left需要推进的情况全部返回null
+                        if(marked == true){
+                            marked = false;
+                            leftRecord = null;
+                            return null;
+                        }
+                        if(leftKey.compareTo(rightKey)<0){
+                            leftRecord = null;
+                            return null;
+                        }
+                        else if(leftKey.compareTo(rightKey)>0){
+                            rightRecord = rightIterator.next();
+                        }
+                    }
+                }
+                else{
+                    //left 和right均达到了最后一个元素
+                    if(leftKey.compareTo(rightKey)==0){
+                        if(marked == false){
+                            marked =true;
+                            rightIterator.markPrev();
+                        }
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        //由于right和left都不可能推进了，直接把right置为null，下次调用直接返null即可
+                        rightRecord = null;
+                        return joinedRecord;
+                    }
+                    else{
+                        //不相等的情况下left和right至少一个要移动直接返回null
+                        return null;
+                    }
+                }
+            }
+            
+            
+
+            
         }
 
         @Override
