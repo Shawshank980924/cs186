@@ -1,254 +1,219 @@
-# RookieDB
+# Project 3: Joins and Query Optimization
+:::info
+💡  第三个proj就主要实现各种join、sort算法和查询的优化，part1对应join、sort算法，part2对应查询优化
 
-![The official unofficial mascot of the class projects](images/derpydb-small.jpg)
+1. part1 分为三个task
+   1. 理解Nested Loop Joins并实现BNLJ的算法
+:::
 
-## Overview
+## Part-1: Task 1 Nested Loop Joins
 
-This repo contains my implementation for CS186 RookieDB projects. There is a [gitbook](https://cs186.gitbook.io/project/) for CS186 projects, but it may be updated each semester, so I cloned the 2021 spring version. You can find the projects handout that I used [here](./project-handout).
+- [x] BNLJ的left block以及right page在放进内存后访问的顺序是怎样的
 
-The master branch contains a bare-bones database implementation, which supports
-executing simple transactions in series. This is the skeleton code you will use throughout the projects. In the assignments of
-this class, you will be adding support for
-B+ tree indices, efficient join algorithms, query optimization, multigranularity
-locking to support concurrent execution of transactions, and database recovery.
+可以看这个proj的动画演示，应该是对于左block中每个record，去遍历page，page遍历结束换下一个page
+全部的page遍历结束换下一个block
+![](https://cdn.nlark.com/yuque/0/2022/gif/25488814/1655552796463-2e5fc7e7-f506-4a89-ad4c-830c6a95f579.gif#crop=0&crop=0&crop=1&crop=1&from=url&id=JhCQP&margin=%5Bobject%20Object%5D&originHeight=520&originWidth=408&originalType=binary&ratio=1&rotation=0&showTitle=false&status=done&style=none&title=)
 
-## How to use
+- [x] IndexBacktrackingIterator这个回溯迭代器的作用是什么
 
-My implementation for each project is in the corresponding branch as follows (you can use `git branch -a` to see them), you can `git checkout branch_name` to see my implementation for each project.
+根据题意：
+> - Case 1: The right page iterator has a value to yield
+> - Case 2: The right page iterator doesn't have a value to yield but the left block iterator does
+> - Case 3: Neither the right page nor left block iterators have values to yield, but there's more right pages
+> - Case 4: Neither right page nor left block iterators have values nor are there more right pages, but there are still left blocks
 
-| **Assignment**                                                                                | **Branch name** |
-|-----------------------------------------------------------------------------------------------|---------------------|
-| Skeleton code                                                | Master          |
-| [Project 2: B+ Trees](https://cs186.gitbook.io/project/assignments/proj2)                     | b_plus_tree |
-| [Project 3: Joins and Query Optimization](https://cs186.gitbook.io/project/assignments/proj3) | join_query_opt |
-| [Project 4: Concurrency](https://cs186.gitbook.io/project/assignments/proj4)                  | concurrency |
-| [Project 5: Recovery](https://cs186.gitbook.io/project/assignments/proj5)                     | recovery |
+对于case2，left block iterator在next以后，right page iterator应该重置到该页的页首
+对于case3，right page在fetch新的以后，left block iterator应当重置到block的第一个record
+对于case4，left block iterator在fetch新的以后，right page iterator和rightsourceiterator都应该重置到第一个页页首和第一个record
+这里的重置操作就是 这个迭代器的reset函数功能，应当在每次fetch新的时候通过marknext标记第一个迭代器的位置
 
-To start your Rookiedb projects journey, first clone the skeleton code (i.e. master branch) , then follow the instruction below to set up your local development environment. When you  start one specific project, you can create a new branch from master then implement it to keep your code tree clean. 
+- [x] 一些容易出现的bug
+- leftrecord在case3手动重置left block iterator以后应该同时更新
+- 对于case4忘记重置rightsourceiterator
+## Part-1: Task 2: Hash Joins
 
-## Setting up your local development environment
+- [x] 根据testSimpleSHJ对于SHJOperator的调用逻辑如下
 
-You are free to use any text editor or IDE to complete the assignments, but **we
-will build and test your code in a docker container with Maven**.
+![](https://cdn.nlark.com/yuque/0/2022/jpeg/25488814/1655951545125-91ffb1e5-a173-4ec6-ab4f-38b061473cea.jpeg)
 
-We recommend setting up a local development environment by installing Java
-8 locally (the version our Docker container runs) and using an IDE such as
-IntelliJ.
+- [x] 思维导图备注
+1. 为所有的leftRecords创建空白分区，分区的数量=B-1
+1. 根据hash函数将每个leftRecords分配到特定的分区中
+1. bulid阶段，将partition[i]中的leftRecords根据key放进hashTable中，probe阶段，依次遍历rightRecords，根据key与相应key在hashTable存储的list中的各个leftRecords进行join加入到joinRecords中
 
-[Java 8 downloads](http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html)
-
-If you have another version of Java installed, it's probably fine to use it, as
-long as you do not use any features not in Java 8. You should run tests
-somewhat frequently inside the container to make sure that your code works with
-our setup.
-
-To import the project into IntelliJ, make sure that you import as a Maven
-project (select the pom.xml file when importing). Make sure that you can compile
-your code and run tests (it's ok if there are a lot of failed tests - you
-haven't begun implementing anything yet!). You should also make sure that you
-can run the debugger and step through code.
-
-## Running tests in IntelliJ
-
-If you are using IntelliJ, and wish to run the tests for a given assignment
-follow the instructions in the following document:
-
-[IntelliJ setup](intellij-test-setup.md)
-
-## The code
-
-As you will be working with this codebase for the rest of the semester, it is a good idea to get familiar with it. The code is located in the `src/main/java/edu/berkeley/cs186/database` directory, while the tests are located in the `src/test/java/edu/berkeley/cs186/database directory`. The following is a brief overview of each of the major sections of the codebase.
-
-### cli
-
-The cli directory contains all the logic for the database's command line interface. Running the main method of CommandLineInterface.java will create an instance of the database and create a simple text interface that you can send and review the results of queries in. **The inner workings of this section are beyond the scope of the class** (although you're free to look around), you'll just need to know how to run the Command Line Interface.
-
-#### cli/parser
-
-The subdirectory cli/parser contains a lot of scary looking code! Don't be intimidated, this is all generated automatically from the file RookieParser.jjt in the root directory of the repo. The code here handles the logic to convert from user inputted queries (strings) into a tree of nodes representing the query (parse tree).
-
-#### cli/visitor
-
-The subdirectory cli/visitor contains classes that help traverse the trees created from the parser and create objects that the database can work with directly.
-
-### common
-
-The `common` directory contains bits of useful code and general interfaces that
-are not limited to any one part of the codebase.
-
-### concurrency
-
-The `concurrency` directory contains a skeleton for adding multigranularity
-locking to the database. You will be implementing this in Project 4.
-
-### databox
-
-Our database has, like most DBMS's, a type system distinct from that of the
-programming language used to implement the DBMS. (Our DBMS doesn't quite provide
-SQL types either, but it's modeled on a simplified version of SQL types).
-
-The `databox` directory contains classes which represents values stored in
-a database, as well as their types. The various `DataBox` classes represent
-values of certain types, whereas the `Type` class represents types used in the
-database.
-
-An example:
+对于GHJ而言的不同点在于，leftRecords可能需要多次分区直到各分区的Records的数量达到要求不大于B-2，与此同时rightRecords也需要同时分区，同时看buildAndProbe可以发现：
 ```java
-DataBox x = new IntDataBox(42); // The integer value '42'.
-Type t = Type.intType();        // The type 'int'.
-Type xsType = x.type();         // Get x's type, which is Type.intType().
-int y = x.getInt();             // Get x's value: 42.
-String s = x.getString();       // An exception is thrown, since x is not a string.
+if (leftPartition.getNumPages() <= this.numBuffers - 2) {
+            buildRecords = leftPartition;
+            buildColumnIndex = getLeftColumnIndex();
+            probeRecords = rightPartition;
+            probeColumnIndex = getRightColumnIndex();
+            probeFirst = false;
+        } else if (rightPartition.getNumPages() <= this.numBuffers - 2) {
+            buildRecords = rightPartition;
+            buildColumnIndex = getRightColumnIndex();
+            probeRecords = leftPartition;
+            probeColumnIndex = getLeftColumnIndex();
+            probeFirst = true;
+        } else {
+            throw new IllegalArgumentException(
+                "Neither the left nor the right records in this partition " +
+                "fit in B-2 pages of memory."
+            );
+        }
 ```
+对于GHJ来说对于每个partition来说是左边还是右边的作为bulid table是不确定的，需要若leftPages不大于B-2则build left，否则build rihgt
 
-### index
+- [x] 不同的分区之间的在buildAndProbe时pass值可能不同
 
-The `index` directory contains a skeleton for implementing B+ tree indices. You
-will be implementing this in Project 2.
+因为每个分区中record的数量不同，若有个分区left和right的page数量超过B-2就需要对于这两个分区的内的records递归调用run函数继续分区直到符合位置，但是其他分区可能已经符合要求了可以先行进入buildAndProbe阶段
 
-### memory
+- [x] 两个record相互调用concat的顺序有特定关系
 
-The `memory` directory contains classes for managing the loading of data
-into and out of memory (in other words, buffer management).
+A join B，那么必须是A.record.concat(B.record)，由于build hashTable不一定是left records，需要借助probeFirst来判断是谁调用concat函数
 
-The `BufferFrame` class represents a single buffer frame (page in the buffer
-pool) and supports pinning/unpinning and reading/writing to the buffer frame.
-All reads and writes require the frame be pinned (which is often done via the
-`requireValidFrame` method, which reloads data from disk if necessary, and then
-returns a pinned frame for the page).
+- [x] 关于breakSHJ和breakGHJ的test数据选取
 
-The `BufferManager` interface is the public interface for the buffer manager of
-our DBMS.
+breakSHJ的数据取的思路是考虑最坏的情况，根据题意left每个分区的records的个数不能超过32个，那么给left不同的32*（b-1）=160+个records SHJ必定爆掉，此时控制right records很少GHJ是可以保证GHJ不爆掉
+而对于breakGHJ来说，若考虑最坏情况就不合适了需要3125*（B-1)+个records，这样test会跑的很慢，简单的思路就是在left和right中相同的值插入超过32个不管hashfunc怎么变，永远都有一个分区中的数据超过32个，即BreakGHJ
+## Part-1:  Task 3: External Sort
 
-The `BufferManagerImpl` class implements a buffer manager using
-a write-back buffer cache with configurable eviction policy. It is responsible
-for fetching pages (via the disk space manager) into buffer frames, and returns
-Page objects to allow for manipulation of data in memory.
+- [x] 执行流程
+1. 入口函数是sort()，借助`getBlockIterator`函数将所有records的迭代器分成N/B个迭代器
+1. 对于1中产生的每个迭代器，使用sortRun进行内部排序得到都各自依次排序好的run list
+1. 循环调用mergePass函数直到list中只有一个run
+- [x] 关于mergePass函数的执行逻辑
 
-The `Page` class represents a single page. When data in the page is accessed or
-modified, it delegates reads/writes to the underlying buffer frame containing
-the page.
+mergePass函数将B-1个runs合并成一个，有一点技巧性，取出runs中每个每个run的迭代器，将record和run在runs中的index记录成一个Pair，将每个run对于的第一个Pair放入优先队列，取出最小的Pair，然后把该Pair的run对应迭代器的下一个Pair加入优先队列，重复以上操作实现merge
 
-The `EvictionPolicy` interface defines a few methods that determine how the
-buffer manager evicts pages from memory when necessary. Implementations of these
-include the `LRUEvictionPolicy` (for LRU) and `ClockEvictionPolicy` (for clock).
-
-### io
-
-The `io` directory contains classes for managing data on-disk (in other words,
-disk space management).
-
-The `DiskSpaceManager` interface is the public interface for the disk space
-manager of our DBMS.
-
-The `DiskSpaceMangerImpl` class is the implementation of the disk space
-manager, which maps groups of pages (partitions) to OS-level files, assigns
-each page a virtual page number, and loads/writes these pages from/to disk.
-
-### query
-
-The `query` directory contains classes for managing and manipulating queries.
-
-The various operator classes are query operators (pieces of a query), some of
-which you will be implementing in Project 3.
-
-The `QueryPlan` class represents a plan for executing a query (which we will be
-covering in more detail later in the semester). It currently executes the query
-as given (runs things in logical order, and performs joins in the order given),
-but you will be implementing
-a query optimizer in Project 3 to run the query in a more efficient manner.
-
-### recovery
-
-The `recovery` directory contains a skeleton for implementing database recovery
-a la ARIES. You will be implementing this in Project 5.
-
-### table
-
-The `table` directory contains classes representing entire tables and records.
-
-The `Table` class is, as the name suggests, a table in our database. See the
-comments at the top of this class for information on how table data is layed out
-on pages.
-
-The `Schema` class represents the _schema_ of a table (a list of column names
-and their types).
-
-The `Record` class represents a record of a table (a single row). Records are
-made up of multiple DataBoxes (one for each column of the table it belongs to).
-
-The `RecordId` class identifies a single record in a table.
-
-
-The `PageDirectory` class is an implementation of a heap file that uses a page directory.
-
-#### table/stats
-
-The `table/stats` directory contains classes for keeping track of statistics of
-a table. These are used to compare the costs of different query plans, when you
-implement query optimization in Project 4.
-
-### Transaction.java
-
-The `Transaction` interface is the _public_ interface of a transaction - it
-contains methods that users of the database use to query and manipulate data.
-
-This interface is partially implemented by the `AbstractTransaction` abstract
-class, and fully implemented in the `Database.Transaction` inner class.
-
-### TransactionContext.java
-
-The `TransactionContext` interface is the _internal_ interface of a transaction -
-it contains methods tied to the current transaction that internal methods
-(such as a table record fetch) may utilize.
-
-The current running transaction's transaction context is set at the beginning
-of a `Database.Transaction` call (and available through the static
-`getCurrentTransaction` method) and unset at the end of the call.
-
-This interface is partially implemented by the `AbstractTransactionContext` abstract
-class, and fully implemented in the `Database.TransactionContext` inner class.
-
-### Database.java
-
-The `Database` class represents the entire database. It is the public interface
-of our database - users of our database can use it like a Java library.
-
-All work is done in transactions, so to use the database, a user would start
-a transaction with `Database#beginTransaction`, then call some of
-`Transaction`'s numerous methods to perform selects, inserts, and updates.
-
-For example:
+## Part-1: Task 4: Sort Merge Join
+直接贴代码和注释，主要就是notes中的这三段话转成代码实现就可以了，但是我实现的很罗里吧嗦，却可以跑通
+![image.png](https://cdn.nlark.com/yuque/0/2022/png/25488814/1656085800266-875d00f6-76a0-4091-9f91-729ceadad0c3.png#clientId=u3bc9fc29-919b-4&crop=0&crop=0&crop=1&crop=1&from=paste&height=456&id=uc00a4856&margin=%5Bobject%20Object%5D&name=image.png&originHeight=570&originWidth=1433&originalType=binary&ratio=1&rotation=0&showTitle=false&size=134570&status=done&style=none&taskId=udaff7116-d9bb-4ac3-8f7f-0918713b58c&title=&width=1146.4)
 ```java
-Database db = new Database("database-dir");
+private Record fetchNextRecord() {
+            // TODO(proj3_part1): implement
+            //left和right有一个为null直接返回null
+            if(leftRecord == null||rightRecord == null){
+                return null;
+            }
+            while(true){
+                DataBox leftKey = leftRecord.getValue(getLeftColumnIndex());
+                DataBox rightKey = rightRecord.getValue(getRightColumnIndex());
+                //左右均有下一个的情况
+                if(leftIterator.hasNext()&& rightIterator.hasNext()){
+                    if(leftKey.compareTo(rightKey)==0){
+                        //若对leftKey第一次找到rightKey达到相等，则需要标记rightIterator的位置
+                        if(marked == false){
+                            marked =true;
+                            rightIterator.markPrev();
+                        }
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        //只推进rightIterator
+                        rightRecord = rightIterator.next();
+                        return joinedRecord;
+                    }
+                    else{
+                        //不相等的情况首先判断marked
+                        if(marked == true){
+                            //重置mark，right跳回标记处，left next
+                            leftRecord = leftIterator.next();
+                            rightIterator.reset();
+                            rightRecord = rightIterator.next();
+                            marked = false;
+                            continue;
+                        }
+                        //左边比右边小，左边next
+                        if(leftKey.compareTo(rightKey)<0){
+                            leftRecord = leftIterator.next();
+                        }
+                        //右边比左边小，右边next
+                        else if(leftKey.compareTo(rightKey)>0){
+                            rightRecord = rightIterator.next();
+                        }
+                    }
 
-try (Transaction t1 = db.beginTransaction()) {
-    Schema s = new Schema()
-            .add("id", Type.intType())
-            .add("firstName", Type.stringType(10))
-            .add("lastName", Type.stringType(10));
+                }
+                else if(leftIterator.hasNext()){
+                    //右边没有record的了，但是左边还有
+                    if(leftKey.compareTo(rightKey)==0){
+                        //因为右边没有record了，直接跳回标记处，left next
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        leftRecord = leftIterator.next();
+                        rightIterator.reset();
+                        rightRecord = rightIterator.next();
+                        // rightRecord = rightIterator.next();
+                        return joinedRecord;
+                    }
+                    else{
+                        if(marked == true){
+                            //这里和上面的情况相同相同
+                            leftRecord = leftIterator.next();
+                            rightIterator.reset();
+                            rightRecord = rightIterator.next();
+                            marked = false;
+                            continue;
+                        }
+                        //左边比右边小，左边next
+                        if(leftKey.compareTo(rightKey)<0){
+                            leftRecord = leftIterator.next();
+                        }
+                        //右边比左边小，因为右边不能再推进了，直接返回null
+                        else if(leftKey.compareTo(rightKey)>0){
+                            // rightRecord = rightIterator.next();
+                            rightRecord = null;
+                            return null;
+                        }
+                    }
+                }
+                else if(rightIterator.hasNext()){
+                    //右边还有，左边没了
+                    if(leftKey.compareTo(rightKey)==0){
+                        //同左右都有的情况
+                        if(marked == false){
+                            marked =true;
+                            rightIterator.markPrev();
+                        }
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        rightRecord = rightIterator.next();
+                        return joinedRecord;
+                    }
+                    else{
+                        //不相等时，left需要推进的情况全部返回null
+                        if(marked == true){
+                            marked = false;
+                            leftRecord = null;
+                            return null;
+                        }
+                        if(leftKey.compareTo(rightKey)<0){
+                            leftRecord = null;
+                            return null;
+                        }
+                        else if(leftKey.compareTo(rightKey)>0){
+                            rightRecord = rightIterator.next();
+                        }
+                    }
+                }
+                else{
+                    //left 和right均达到了最后一个元素
+                    if(leftKey.compareTo(rightKey)==0){
+                        if(marked == false){
+                            marked =true;
+                            rightIterator.markPrev();
+                        }
+                        Record joinedRecord = leftRecord.concat(rightRecord);
+                        //由于right和left都不可能推进了，直接把right置为null，下次调用直接返null即可
+                        rightRecord = null;
+                        return joinedRecord;
+                    }
+                    else{
+                        //不相等的情况下left和right至少一个要移动直接返回null
+                        return null;
+                    }
+                }
+            }
+            
+            
 
-    t1.createTable(s, "table1");
-
-    t1.insert("table1", 1, "Jane", "Doe");
-    t1.insert("table1", 2, "John", "Doe");
-
-    t1.commit();
-}
-
-try (Transaction t2 = db.beginTransaction()) {
-    // .query("table1") is how you run "SELECT * FROM table1"
-    Iterator<Record> iter = t2.query("table1").execute();
-
-    System.out.println(iter.next()); // prints [1, John, Doe]
-    System.out.println(iter.next()); // prints [2, Jane, Doe]
-
-    t2.commit();
-}
-
-db.close();
+            
+        }
 ```
-
-More complex queries can be found in
-[`src/test/java/edu/berkeley/cs186/database/TestDatabase.java`](src/test/java/edu/berkeley/cs186/database/TestDatabase.java).
-
