@@ -678,6 +678,54 @@ public class QueryPlan {
         //      calculate the cheapest join with the new table (the one you
         //      fetched an operator for from pass1Map) and the previously joined
         //      tables. Then, update the result map if needed.
+        Set<Set<String>> sets = prevMap.keySet();
+        for(Set set: sets){
+            Iterator<JoinPredicate> it = this.joinPredicates.iterator();
+            while(it.hasNext()){
+                JoinPredicate joinPredicate = it.next();
+                //      Case 1: The set contains left table but not right, use pass1Map
+                //              to fetch an operator to access the rightTable
+                if(set.contains(joinPredicate.leftTable)&&!set.contains(joinPredicate.rightTable)){
+                    QueryOperator leftOp = prevMap.get(set);
+                    JoinPredicate removeJoin = null;
+                    for(Set pass1Set : pass1Map.keySet()){
+                        if(pass1Set.contains(joinPredicate.rightTable)){
+                            QueryOperator rightOp = pass1Map.get(pass1Set);
+                            QueryOperator resultOp = minCostJoinType(leftOp, rightOp, joinPredicate.leftColumn, joinPredicate.rightColumn);
+                            HashSet newHashset = new HashSet<>(set);
+                            newHashset.add(joinPredicate.rightTable);
+                            result.put(newHashset,resultOp);
+//                            it.remove();
+                            break;
+                        }
+                    }
+//                    if(removeJoin!=null)joinPredicates.remove(removeJoin);
+
+                }
+                //      Case 2: The set contains right table but not left, use pass1Map
+                //              to fetch an operator to access the leftTable.
+                else if(set.contains(joinPredicate.rightTable)&&!set.contains(joinPredicate.leftTable)){
+                    QueryOperator rightOp = prevMap.get(set);
+                    JoinPredicate removeJoin = null;
+                    for(Set pass1Set : pass1Map.keySet()){
+                        if(pass1Set.contains(joinPredicate.leftTable)){
+                            QueryOperator leftOp = pass1Map.get(pass1Set);
+                            QueryOperator resultOp = minCostJoinType(leftOp, rightOp, joinPredicate.leftColumn, joinPredicate.rightColumn);
+                            HashSet newHashset = new HashSet<>(set);
+                            newHashset.add(joinPredicate.leftTable);
+                            result.put(newHashset,resultOp);
+//                            it.remove();
+                            break;
+                        }
+                    }
+//                    if(removeJoin!=null)joinPredicates.remove(removeJoin);
+                }
+                //      Case 3: Otherwise, skip this join predicate and continue the loop.
+                else{
+                    continue;
+                }
+            }
+        }
         return result;
     }
 
