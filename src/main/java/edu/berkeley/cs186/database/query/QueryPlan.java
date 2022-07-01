@@ -574,9 +574,41 @@ public class QueryPlan {
      * minimum cost operator can be broken arbitrarily.
      */
     public QueryOperator minCostSingleAccess(String table) {
+        //默认情况下使用sequentialscan
         QueryOperator minOp = new SequentialScanOperator(this.transaction, table);
+        int minCost = minOp.estimateIOCost();
+        int preIndex = -1;
+        //遍历所有的index column
+        List<String> fieldNames = this.transaction.getStats(table).getSchema().getFieldNames();
+        //获取所有可以建立索引的predicate
+        List<Integer> eligibleIndexColumns = getEligibleIndexColumns(table);
+        for(Integer index:eligibleIndexColumns){
+            //依次计算所有可能的io cost
+            SelectPredicate predicate = this.selectPredicates.get(index);
+            QueryOperator indexOp = new IndexScanOperator(this.transaction,table,predicate.column,predicate.operator,predicate.value);
+            int ioCost = indexOp.estimateIOCost();
+            if(ioCost<minCost){
+                minOp = indexOp;
+                minCost = ioCost;
+                preIndex = index;
+            }
+
+        }
+        //通过indexscan的predicate 需要在selectPredicates中去掉
+        if(preIndex!=-1){
+            this.selectPredicates.remove(preIndex);
+        }
+        //push down 所有的predicate
+        for(int i=0;i<selectPredicates.size();i++){
+            SelectPredicate predicate = selectPredicates.get(i);
+            minOp = new SelectOperator(minOp,predicate.column,predicate.operator,predicate.value);
+        }
+
+
 
         // TODO(proj3_part2): implement
+
+
         return minOp;
     }
 
