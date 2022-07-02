@@ -767,15 +767,35 @@ public class QueryPlan {
         // Pass 1: For each table, find the lowest cost QueryOperator to access
         // the table. Construct a mapping of each table name to its lowest cost
         // operator.
+        //先拿到pass1的Map
+        Map<Set<String>, QueryOperator> pass1Map = new HashMap<>();
+        for(String tableName : tableNames){
+            QueryOperator queryOp = minCostSingleAccess(tableName);
+            HashSet<String> set = new HashSet<>();
+            set.add(tableName);
+            pass1Map.put(set,queryOp);
+        }
+        //复刻一个pass1Map作为join的input
+        Map<Set<String>,QueryOperator>passMap = new HashMap<>(pass1Map);
         //
         // Pass i: On each pass, use the results from the previous pass to find
         // the lowest cost joins with each table from pass 1. Repeat until all
         // tables have been joined.
         //
+        //当passMap的size不为一时说明join还未结束，需要继续循环进入下一个pass
+        while(passMap.size()>1){
+            passMap = minCostJoins(passMap, pass1Map);
+        }
         // Set the final operator to the lowest cost operator from the last
         // pass, add group by, project, sort and limit operators, and return an
         // iterator over the final operator.
-        return this.executeNaive(); // TODO(proj3_part2): Replace this!
+        //把join的结果取出来
+        this.finalOperator = passMap.values().iterator().next();
+        this.addGroupBy();
+        this.addProject();
+        this.addSort();
+        this.addLimit();
+        return this.finalOperator.iterator(); // TODO(proj3_part2): Replace this!
     }
 
     // EXECUTE NAIVE ///////////////////////////////////////////////////////////
