@@ -682,48 +682,46 @@ public class QueryPlan {
         for(Set set: sets){
             Iterator<JoinPredicate> it = this.joinPredicates.iterator();
             while(it.hasNext()){
+                //下一个join条件
                 JoinPredicate joinPredicate = it.next();
+                QueryOperator leftOp = prevMap.get(set);
+                //用于找pass1Map的辅助数据结构
+                HashSet<String> p1Table = new HashSet<>();
+                //用于储存join后新的hashset
+                HashSet newHashset = new HashSet<>(set);
+                QueryOperator resultOp = null;
                 //      Case 1: The set contains left table but not right, use pass1Map
                 //              to fetch an operator to access the rightTable
                 if(set.contains(joinPredicate.leftTable)&&!set.contains(joinPredicate.rightTable)){
-                    QueryOperator leftOp = prevMap.get(set);
-                    JoinPredicate removeJoin = null;
-                    for(Set pass1Set : pass1Map.keySet()){
-                        if(pass1Set.contains(joinPredicate.rightTable)){
-                            QueryOperator rightOp = pass1Map.get(pass1Set);
-                            QueryOperator resultOp = minCostJoinType(leftOp, rightOp, joinPredicate.leftColumn, joinPredicate.rightColumn);
-                            HashSet newHashset = new HashSet<>(set);
-                            newHashset.add(joinPredicate.rightTable);
-                            result.put(newHashset,resultOp);
-//                            it.remove();
-                            break;
-                        }
+                    p1Table.add(joinPredicate.rightTable);
+                    if(pass1Map.containsKey(p1Table)){
+                        QueryOperator rightOp = pass1Map.get(p1Table);
+                        resultOp = minCostJoinType(leftOp, rightOp, joinPredicate.leftColumn, joinPredicate.rightColumn);
+                        newHashset.add(joinPredicate.rightTable);
                     }
-//                    if(removeJoin!=null)joinPredicates.remove(removeJoin);
 
                 }
                 //      Case 2: The set contains right table but not left, use pass1Map
                 //              to fetch an operator to access the leftTable.
                 else if(set.contains(joinPredicate.rightTable)&&!set.contains(joinPredicate.leftTable)){
-                    QueryOperator rightOp = prevMap.get(set);
-                    JoinPredicate removeJoin = null;
-                    for(Set pass1Set : pass1Map.keySet()){
-                        if(pass1Set.contains(joinPredicate.leftTable)){
-                            QueryOperator leftOp = pass1Map.get(pass1Set);
-                            QueryOperator resultOp = minCostJoinType(leftOp, rightOp, joinPredicate.leftColumn, joinPredicate.rightColumn);
-                            HashSet newHashset = new HashSet<>(set);
-                            newHashset.add(joinPredicate.leftTable);
-                            result.put(newHashset,resultOp);
-//                            it.remove();
-                            break;
-                        }
+                    p1Table.add(joinPredicate.leftTable);
+                    if(pass1Map.containsKey(p1Table)){
+                        QueryOperator rightOp = pass1Map.get(p1Table);
+                        //注意必须是left-deep join，所以必须把joinPredicate掉个个儿
+                        resultOp = minCostJoinType(leftOp, rightOp, joinPredicate.rightColumn, joinPredicate.leftColumn);
+                        newHashset.add(joinPredicate.leftTable);
+
                     }
-//                    if(removeJoin!=null)joinPredicates.remove(removeJoin);
                 }
                 //      Case 3: Otherwise, skip this join predicate and continue the loop.
                 else{
                     continue;
                 }
+                //若result里面已经有这个key时需要保留较小的IOCost，需要进行判断
+                if(result.containsKey(newHashset)&&result.get(newHashset).estimateIOCost()<resultOp.estimateIOCost()){
+                    continue;
+                }
+                result.put(newHashset,resultOp);
             }
         }
         return result;
