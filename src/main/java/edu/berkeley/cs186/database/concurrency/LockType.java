@@ -124,14 +124,16 @@ public enum LockType {
             return required.equals(X)||required.equals(S)||required.equals(IX)||required.equals(IS)||required.equals(SIX);
         }
         else if(substitute.equals(S)){
-            return required.equals(S)||required.equals(IS)||required.equals(IX)||required.equals(SIX);
+            return required.equals(S)||required.equals(IS);
         }
         else if(substitute.equals(IS)){
-            return required.equals(IS)||required.equals(SIX);
+            return required.equals(IS);
         }
-        else if(substitute.equals(IX))return required.equals(IX)||required.equals(IS);
+        else if(substitute.equals(IX)){
+            return required.equals(IX)||required.equals(IS);
+        }
         else if(substitute.equals(SIX)){
-            return required.equals(S)||required.equals(IX);
+            return required.equals(S)||required.equals(IX)||required.equals(IS)||required.equals(SIX);
         }
 
         // TODO(proj4_part1): implement
