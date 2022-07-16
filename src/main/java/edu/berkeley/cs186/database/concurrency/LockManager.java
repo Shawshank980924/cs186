@@ -265,7 +265,6 @@ public class LockManager {
                     if (releaseNames.contains(heldLock.name)) {
                         releaseLocks.add(heldLock);
                         resourceNames.remove(heldLock.name);
-//                        num++;
                     }
 
                 }
@@ -290,7 +289,6 @@ public class LockManager {
                 resourceEntry.addToQueue(lockRequest, true);
                 shouldBlock = true;
                 transaction.prepareBlock();
-
             }
         }
         if (shouldBlock) {

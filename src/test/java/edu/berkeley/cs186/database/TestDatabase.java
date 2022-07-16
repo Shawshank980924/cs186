@@ -3,6 +3,7 @@ package edu.berkeley.cs186.database;
 import edu.berkeley.cs186.database.categories.Proj99Tests;
 import edu.berkeley.cs186.database.categories.SystemTests;
 import edu.berkeley.cs186.database.common.PredicateOperator;
+import edu.berkeley.cs186.database.concurrency.LockManager;
 import edu.berkeley.cs186.database.databox.DataBox;
 import edu.berkeley.cs186.database.databox.IntDataBox;
 import edu.berkeley.cs186.database.databox.StringDataBox;
@@ -131,10 +132,14 @@ public class TestDatabase {
 
         RecordId rid;
         Record rec;
+
         try(Transaction t1 = db.beginTransaction()) {
             t1.createTable(s, tableName);
+
             rid = t1.getTransactionContext().addRecord(tableName, input);
             rec = t1.getTransactionContext().getRecord(tableName, rid);
+
+
 
             assertEquals(input, rec);
         }
@@ -158,6 +163,7 @@ public class TestDatabase {
             t1.createTable(s, "table1");
             t1.insert("table1",1, "Jane", "Doe");
             t1.insert("table1", 2, "John", "Doe");
+
             t1.commit();
         }
 
@@ -181,6 +187,7 @@ public class TestDatabase {
             t1.insert("table1", 1, "Jane", "Doe");
             t1.insert("table1", 2, "John", "Doe");
             t1.commit();
+
         }
 
         try (Transaction t2 = db.beginTransaction()) {

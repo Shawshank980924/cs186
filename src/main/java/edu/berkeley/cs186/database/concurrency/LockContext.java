@@ -188,7 +188,7 @@ public class LockContext {
             if(!LockType.canBeParentLock(this.parentContext().getEffectiveLockType(transaction),newLockType)){
                 throw new InvalidLockException("can't be parent");
             }
-            }
+        }
         LockType oldLockType = this.lockman.getLockType(transaction, resourceName);
         long transNum = transaction.getTransNum();
         //若提升为SIX，需要释放其下的所有锁
@@ -197,15 +197,11 @@ public class LockContext {
             List<ResourceName> sisDs = sisDescendants(transaction);
             //对所有的子节点资源的父节点的numchildrenlocks进行更新
             for (ResourceName sisD : sisDs) {
-                List<String> names = sisD.getNames();
-                String name = names.get(names.size() - 1);
-                LockContext childLockContext = childContext(name);
-                if(childLockContext.parentContext()!=null){
-                    Map<Long, Integer> numChildLocks = childLockContext.parentContext().numChildLocks;
-                    numChildLocks.put(transNum,numChildLocks.get(transNum)-1);
-                }
-
-//                childLockContext.release(transaction);
+                LockContext childLockContext = LockContext.fromResourceName(lockman, sisD);
+                LockContext parentContext = childLockContext.parentContext();
+                //注意持有自己resource的锁释放以后因为要通过requireAndRelease重新持有所以不减少其parentContext.numChildLocks
+                Map<Long, Integer> numChildLocks = parentContext.numChildLocks;
+                numChildLocks.put(transNum,numChildLocks.get(transNum)-1);
             }
             sisDs.add(this.getResourceName());
             this.lockman.acquireAndRelease(transaction,getResourceName(),newLockType,sisDs);

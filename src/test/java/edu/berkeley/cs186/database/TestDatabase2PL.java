@@ -3,10 +3,12 @@ package edu.berkeley.cs186.database;
 import edu.berkeley.cs186.database.categories.Proj4Part2Tests;
 import edu.berkeley.cs186.database.categories.Proj4Tests;
 import edu.berkeley.cs186.database.categories.PublicTests;
+import edu.berkeley.cs186.database.concurrency.LockManager;
 import edu.berkeley.cs186.database.concurrency.LoggingLockManager;
 import edu.berkeley.cs186.database.table.Record;
 import edu.berkeley.cs186.database.table.RecordId;
 import edu.berkeley.cs186.database.table.Schema;
+import edu.berkeley.cs186.database.table.Table;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.DisableOnDebug;
@@ -238,12 +240,17 @@ public class TestDatabase2PL {
 
         try(Transaction t1 = beginTransaction()) {
             t1.insert(tableName, input);
+//            System.out.println(removeMetadataLogs(lockManager.log));
+//            LockManager lockManager = db.getLockManager();
+
+//            System.out.println(lockManager.getLocks(t1.getTransactionContext()));
+
             // Insert a new record onto the last page of the table
             assertEquals(prepare(t1.getTransNum(),
                     "acquire %s database IX",
                     "acquire %s database/testtable1 IX",
                     "acquire %s database/testtable1/30000000004 X"
-            ), removeMetadataLogs(lockManager.log));
+            ), removeMetadataLogs(this.lockManager.log));
         }
     }
 

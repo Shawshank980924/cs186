@@ -18,6 +18,7 @@ import edu.berkeley.cs186.database.io.DiskSpaceManagerImpl;
 import edu.berkeley.cs186.database.memory.BufferManager;
 import edu.berkeley.cs186.database.memory.ClockEvictionPolicy;
 import edu.berkeley.cs186.database.memory.EvictionPolicy;
+import edu.berkeley.cs186.database.memory.Page;
 import edu.berkeley.cs186.database.query.QueryPlan;
 import edu.berkeley.cs186.database.query.SequentialScanOperator;
 import edu.berkeley.cs186.database.query.SortOperator;
@@ -926,6 +927,32 @@ public class Database implements AutoCloseable {
         public void close() {
             try {
                 // TODO(proj4_part2)
+                LockManager lockManager = Database.this.getLockManager();
+                LockContext databaseContext = lockManager.databaseContext();
+                List<Lock> locks = lockManager.getLocks(this);
+//                //因为锁的加入顺序必定是从上往下的，所以倒着遍历去
+                //但是如果有require and release同时释放顶层和自己的锁
+                while(!locks.isEmpty()){
+                    Iterator<Lock> iterator = locks.iterator();
+                    while(iterator.hasNext()){
+                        Lock lock = iterator.next();
+                        ResourceName name = lock.name;
+                        LockContext lockContext = LockContext.fromResourceName(lockManager, name);
+                        if(lockContext.getNumChildren(this)==0){
+                            //子节点未持有锁说明全部该锁可以释放了
+                            lockContext.release(this);
+                            iterator.remove();
+                        }
+                    }
+                }
+//                for(int i=locks.size()-1;i>=0;i--){
+//                    Lock lock = locks.get(i);
+//                    ResourceName name = lock.name;
+//                    LockContext lockContext = LockContext.fromResourceName(lockManager, name);
+//                    lockContext.release(this);
+//                }
+
+
                 return;
             } catch (Exception e) {
                 // There's a chance an error message from your release phase

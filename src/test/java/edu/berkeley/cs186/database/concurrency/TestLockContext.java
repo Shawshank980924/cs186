@@ -233,6 +233,18 @@ public class TestLockContext {
     }
 
     @Test
+    public void testPromoteSIXSaturation() {
+        // your test code here
+        TransactionContext t1 = transactions[1];
+        dbLockContext.acquire(t1,LockType.IX);
+        tableLockContext.acquire(t1,LockType.IS);
+        pageLockContext.acquire(t1,LockType.S);
+        dbLockContext.promote(t1,LockType.SIX);
+        assertEquals(0,dbLockContext.getNumChildren(t1));
+
+    }
+
+    @Test
     @Category(PublicTests.class)
     public void testEscalateFail() {
         TransactionContext t1 = transactions[1];
@@ -412,5 +424,6 @@ public class TestLockContext {
         dbLockContext.escalate(t1);
         assertEquals(0, dbLockContext.getNumChildren(t1));
     }
+
 
 }
