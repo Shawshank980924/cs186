@@ -61,11 +61,11 @@ public class LockManager {
             //兼容的话分为两种情况：
             // 一种是持有该资源的锁和希望新获取的锁是同一个transaction，那么直接替换为高等级的锁即可
 
-            for(Lock lock:this.locks){
+            for (Lock lock : this.locks) {
                 //若该lockType和已经存在的非同一个transaction的锁互斥，返回false
-                if(except!=lock.transactionNum&&!LockType.compatible(lockType,lock.lockType))return false;
-                //若两个锁持有的transaction是同一个，判断是否可以替换其中的一个，若不能返回false
-                else if(except==lock.transactionNum&&!(LockType.substitutable(lockType,lock.lockType)||LockType.substitutable(lock.lockType,lockType))){
+                if (except != lock.transactionNum && !LockType.compatible(lockType, lock.lockType)) return false;
+                    //若两个锁持有的transaction是同一个，判断是否可以替换其中的一个，若不能返回false
+                else if (except == lock.transactionNum && !(LockType.substitutable(lockType, lock.lockType) || LockType.substitutable(lock.lockType, lockType))) {
                     return false;
                 }
             }
@@ -82,25 +82,25 @@ public class LockManager {
             //获取该transaction在这个resource上已经持有的锁
             LockType transactionLockType = getTransactionLockType(lock.transactionNum);
             //若未持有锁，直接添加锁
-            if(transactionLockType==LockType.NL){
+            if (transactionLockType == LockType.NL) {
                 List<Lock> locks = LockManager.this.transactionLocks.getOrDefault(lock.transactionNum, new ArrayList<>());
                 locks.add(lock);
-                LockManager.this.transactionLocks.put(lock.transactionNum,locks);
+                LockManager.this.transactionLocks.put(lock.transactionNum, locks);
 //                LockManager.this.transactionLocks.get().add(lock);
                 this.locks.add(lock);
             }
             //若该transaction已经持有该resource的锁，替换为高等级的锁
-            else{
+            else {
                 Lock oldLock = findLockByTransaction(lock.transactionNum);
                 //若新加的lock的等级高需要进行替换,替换不改变获取锁的顺序
-                if(LockType.substitutable(lock.lockType,oldLock.lockType)){
+                if (LockType.substitutable(lock.lockType, oldLock.lockType)) {
                     List<Lock> locks = LockManager.this.transactionLocks.get(lock.transactionNum);
                     int index = locks.indexOf(oldLock);
                     locks.remove(oldLock);
-                    locks.add(index,lock);
+                    locks.add(index, lock);
                     index = this.locks.indexOf(oldLock);
                     this.locks.remove(oldLock);
-                    this.locks.add(index,lock);
+                    this.locks.add(index, lock);
                 }
                 //否则直接跳过即可
 
@@ -132,10 +132,9 @@ public class LockManager {
          * the end otherwise.
          */
         public void addToQueue(LockRequest request, boolean addFront) {
-            if(addFront){
+            if (addFront) {
                 this.waitingQueue.addFirst(request);
-            }
-            else{
+            } else {
                 this.waitingQueue.addLast(request);
             }
             // TODO(proj4_part1): implement
@@ -150,18 +149,18 @@ public class LockManager {
         private void processQueue() {
             Iterator<LockRequest> requests = waitingQueue.iterator();
             //只要队列头的第一个request的锁和现持有该resource的锁不冲突，就能一直poll这个队列
-            while(requests.hasNext()){
+            while (requests.hasNext()) {
                 LockRequest next = requests.next();
                 TransactionContext transaction = next.transaction;
                 Lock lock = next.lock;
                 List<Lock> releasedLocks = next.releasedLocks;
-                if(!this.checkCompatible(lock.lockType, lock.transactionNum)){
+                if (!this.checkCompatible(lock.lockType, lock.transactionNum)) {
                     break;
                 }
                 //只要不冲突，就在locks中加入这把锁
                 grantOrUpdateLock(lock);
                 //对于acquireAndRelease来说还需要释放锁
-                for(Lock releaseLock:releasedLocks){
+                for (Lock releaseLock : releasedLocks) {
                     releaseLock(releaseLock);
                 }
                 requests.remove();
@@ -173,10 +172,11 @@ public class LockManager {
             // TODO(proj4_part1): implement
             return;
         }
-        public Lock findLockByTransaction(long transaction){
+
+        public Lock findLockByTransaction(long transaction) {
             Lock result = null;
-            for(Lock lock:this.locks){
-                if(lock.transactionNum==transaction){
+            for (Lock lock : this.locks) {
+                if (lock.transactionNum == transaction) {
                     result = lock;
                     break;
                 }
@@ -191,8 +191,8 @@ public class LockManager {
 
             // TODO(proj4_part1): implement
             LockType result = LockType.NL;
-            for(Lock lock:this.locks){
-                if(lock.transactionNum==transaction){
+            for (Lock lock : this.locks) {
+                if (lock.transactionNum == transaction) {
                     result = lock.lockType;
                     break;
                 }
@@ -223,24 +223,24 @@ public class LockManager {
      * Acquire a `lockType` lock on `name`, for transaction `transaction`, and
      * releases all locks on `releaseNames` held by the transaction after
      * acquiring the lock in one atomic action.
-     *
+     * <p>
      * Error checking must be done before any locks are acquired or released. If
      * the new lock is not compatible with another transaction's lock on the
      * resource, the transaction is blocked and the request is placed at the
      * FRONT of the resource's queue.
-     *
+     * <p>
      * Locks on `releaseNames` should be released only after the requested lock
      * has been acquired. The corresponding queues should be processed.
-     *
+     * <p>
      * An acquire-and-release that releases an old lock on `name` should NOT
      * change the acquisition time of the lock on `name`, i.e. if a transaction
      * acquired locks in the order: S(A), X(B), acquire X(A) and release S(A),
      * the lock on A is considered to have been acquired before the lock on B.
      *
      * @throws DuplicateLockRequestException if a lock on `name` is already held
-     * by `transaction` and isn't being released
-     * @throws NoLockHeldException if `transaction` doesn't hold a lock on one
-     * or more of the names in `releaseNames`
+     *                                       by `transaction` and isn't being released
+     * @throws NoLockHeldException           if `transaction` doesn't hold a lock on one
+     *                                       or more of the names in `releaseNames`
      */
     public void acquireAndRelease(TransactionContext transaction, ResourceName name,
                                   LockType lockType, List<ResourceName> releaseNames)
@@ -253,16 +253,16 @@ public class LockManager {
         synchronized (this) {
             LockType oldLockType = getLockType(transaction, name);
             //若原来transaction持有该资源的锁，且释放的锁中没有持有的资源
-            if(!oldLockType.equals(LockType.NL)&&!releaseNames.contains(name)){
+            if (!oldLockType.equals(LockType.NL) && !releaseNames.contains(name)) {
                 throw new DuplicateLockRequestException(oldLockType.toString());
             }
             Lock lock = new Lock(name, lockType, transaction.getTransNum());
             List<Lock> releaseLocks = new ArrayList<>();
             ArrayList<ResourceName> resourceNames = new ArrayList<>(releaseNames);
-            if(this.transactionLocks.containsKey(transaction.getTransNum())){
+            if (this.transactionLocks.containsKey(transaction.getTransNum())) {
                 List<Lock> locks = this.transactionLocks.get(transaction.getTransNum());
-                for(Lock heldLock:locks){
-                    if(releaseNames.contains(heldLock.name)){
+                for (Lock heldLock : locks) {
+                    if (releaseNames.contains(heldLock.name)) {
                         releaseLocks.add(heldLock);
                         resourceNames.remove(heldLock.name);
 //                        num++;
@@ -272,22 +272,22 @@ public class LockManager {
             }
 
             //若有releaseName没有被该transaction持有锁，抛出错误
-            if(!resourceNames.isEmpty()){
-                throw new NoLockHeldException(transaction.toString()+" on "+releaseNames.toString());
+            if (!resourceNames.isEmpty()) {
+                throw new NoLockHeldException(transaction.toString() + " on " + releaseNames.toString());
             }
             LockRequest lockRequest = new LockRequest(transaction, lock, releaseLocks);
             //获取该resource的resourceEntry
             ResourceEntry resourceEntry = this.getResourceEntry(name);
             //若和当前持有resource的锁兼容直接获取这个锁,并释放相关锁
-            if(resourceEntry.checkCompatible(lock.lockType,lock.transactionNum)){
+            if (resourceEntry.checkCompatible(lock.lockType, lock.transactionNum)) {
                 for (ResourceName releaseName : releaseNames) {
-                    release(transaction,releaseName);
+                    release(transaction, releaseName);
                 }
                 resourceEntry.grantOrUpdateLock(lock);
             }
             //当前情况下无法直接获取该锁，LockRequest进入waiting queue，该transaction挂起阻塞
-            else{
-                resourceEntry.addToQueue(lockRequest,true);
+            else {
+                resourceEntry.addToQueue(lockRequest, true);
                 shouldBlock = true;
                 transaction.prepareBlock();
 
@@ -300,14 +300,14 @@ public class LockManager {
 
     /**
      * Acquire a `lockType` lock on `name`, for transaction `transaction`.
-     *
+     * <p>
      * Error checking must be done before the lock is acquired. If the new lock
      * is not compatible with another transaction's lock on the resource, or if there are
      * other transaction in queue for the resource, the transaction is
      * blocked and the request is placed at the **back** of NAME's queue.
      *
      * @throws DuplicateLockRequestException if a lock on `name` is held by
-     * `transaction`
+     *                                       `transaction`
      */
     public void acquire(TransactionContext transaction, ResourceName name,
                         LockType lockType) throws DuplicateLockRequestException {
@@ -323,22 +323,22 @@ public class LockManager {
             ResourceEntry resourceEntry = this.getResourceEntry(name);
             //若该transaction已经持有该resource锁的时候抛出错误
             LockType oldLockType = getLockType(transaction, name);
-            if(!oldLockType.equals(LockType.NL)){
+            if (!oldLockType.equals(LockType.NL)) {
                 throw new DuplicateLockRequestException(oldLockType.toString());
             }
             //waiting queue为空的话且和当前持有的锁兼容的话直接获取该锁
-            if(resourceEntry.waitingQueue.isEmpty()&&resourceEntry.checkCompatible(lock.lockType,lock.transactionNum)){
+            if (resourceEntry.waitingQueue.isEmpty() && resourceEntry.checkCompatible(lock.lockType, lock.transactionNum)) {
                 resourceEntry.grantOrUpdateLock(lock);
             }
             //当前情况下无法直接获取该锁，LockRequest进入waiting queue，该transaction挂起阻塞
-            else{
-                resourceEntry.addToQueue(lockRequest,false);
+            else {
+                resourceEntry.addToQueue(lockRequest, false);
                 shouldBlock = true;
                 transaction.prepareBlock();
 
             }
 
-            
+
         }
         if (shouldBlock) {
             transaction.block();
@@ -348,7 +348,7 @@ public class LockManager {
     /**
      * Release `transaction`'s lock on `name`. Error checking must be done
      * before the lock is released.
-     *
+     * <p>
      * The resource name's queue should be processed after this call. If any
      * requests in the queue have locks to be released, those should be
      * released, and the corresponding queues also processed.
@@ -361,22 +361,20 @@ public class LockManager {
         // You may modify any part of this method.
         synchronized (this) {
             List<Lock> locks = getLocks(transaction);
-            Iterator<Lock> iterator = this.transactionLocks.getOrDefault(transaction.getTransNum(),new ArrayList<>()).iterator();
-            if(!iterator.hasNext()){
-                throw new NoLockHeldException(transaction.toString()+" on "+name);
+            Iterator<Lock> iterator = this.transactionLocks.getOrDefault(transaction.getTransNum(), new ArrayList<>()).iterator();
+            if (!iterator.hasNext()) {
+                throw new NoLockHeldException(transaction.toString() + " on " + name);
             }
             ResourceEntry resourceEntry = getResourceEntry(name);
-            while(iterator.hasNext()){
+            while (iterator.hasNext()) {
                 Lock next = iterator.next();
-                if(next.name.equals(name)){
+                if (next.name.equals(name)) {
                     iterator.remove();
                     resourceEntry.releaseLock(next);
                     //release 锁可能可以前进
 
                 }
             }
-
-
 
 
         }
@@ -386,22 +384,22 @@ public class LockManager {
      * Promote a transaction's lock on `name` to `newLockType` (i.e. change
      * the transaction's lock on `name` from the current lock type to
      * `newLockType`, if its a valid substitution).
-     *
+     * <p>
      * Error checking must be done before any locks are changed. If the new lock
      * is not compatible with another transaction's lock on the resource, the
      * transaction is blocked and the request is placed at the FRONT of the
      * resource's queue.
-     *
+     * <p>
      * A lock promotion should NOT change the acquisition time of the lock, i.e.
      * if a transaction acquired locks in the order: S(A), X(B), promote X(A),
      * the lock on A is considered to have been acquired before the lock on B.
      *
      * @throws DuplicateLockRequestException if `transaction` already has a
-     * `newLockType` lock on `name`
-     * @throws NoLockHeldException if `transaction` has no lock on `name`
-     * @throws InvalidLockException if the requested lock type is not a
-     * promotion. A promotion from lock type A to lock type B is valid if and
-     * only if B is substitutable for A, and B is not equal to A.
+     *                                       `newLockType` lock on `name`
+     * @throws NoLockHeldException           if `transaction` has no lock on `name`
+     * @throws InvalidLockException          if the requested lock type is not a
+     *                                       promotion. A promotion from lock type A to lock type B is valid if and
+     *                                       only if B is substitutable for A, and B is not equal to A.
      */
     public void promote(TransactionContext transaction, ResourceName name,
                         LockType newLockType)
@@ -414,28 +412,27 @@ public class LockManager {
             LockType lockType = getLockType(transaction, name);
             Lock newLock = new Lock(name, newLockType, transaction.getTransNum());
             //这个transaction之前没有持有该资源的锁，抛出错误
-            if(lockType.equals(LockType.NL)){
+            if (lockType.equals(LockType.NL)) {
                 throw new NoLockHeldException(lockType.toString());
             }
             //原持有锁的类型和现在的相同抛出错误
-            if(lockType.equals(newLockType)){
+            if (lockType.equals(newLockType)) {
                 throw new DuplicateLockRequestException(lockType.toString());
 
             }
             //升级后的锁和原来持有resource的锁是兼容的，判断是否可替换
-            if(resourceEntry.checkCompatible(newLockType,transaction.getTransNum())){
+            if (resourceEntry.checkCompatible(newLockType, transaction.getTransNum())) {
                 //不可替换抛出错误
-                if(!LockType.substitutable(newLockType,lockType)){
-                    throw new InvalidLockException(newLockType.toString()+"->"+lockType.toString());
-                }
-                else{
+                if (!LockType.substitutable(newLockType, lockType)) {
+                    throw new InvalidLockException(newLockType.toString() + "->" + lockType.toString());
+                } else {
                     resourceEntry.grantOrUpdateLock(newLock);
                 }
-            }else{
+            } else {
                 //无法promote，插入队列的第一个位置
-                resourceEntry.addToQueue(new LockRequest(transaction,newLock),true);
+                resourceEntry.addToQueue(new LockRequest(transaction, newLock), true);
                 transaction.prepareBlock();
-                shouldBlock=true;
+                shouldBlock = true;
             }
         }
         if (shouldBlock) {
@@ -452,7 +449,7 @@ public class LockManager {
         ResourceEntry resourceEntry = getResourceEntry(name);
         LockType result = LockType.NL;
         for (Lock lock : resourceEntry.locks) {
-            if(lock.transactionNum==transaction.getTransNum()){
+            if (lock.transactionNum == transaction.getTransNum()) {
                 result = lock.lockType;
                 break;
             }
@@ -493,30 +490,7 @@ public class LockManager {
     public synchronized LockContext databaseContext() {
         return context("database");
     }
-
-    public  void escalateHelper(TransactionContext transaction,List<Lock> releaseLocks,LockContext lockContext,LockType toType){
-        //更改lockContext对于该transaction带的锁
-        ResourceName current = lockContext.getResourceName();
-        ResourceEntry currentEntry = this.getResourceEntry(current);
-        Lock newLock = new Lock(current, toType, transaction.getTransNum());
-        currentEntry.grantOrUpdateLock(newLock);
-        //释放所有的子节点的锁以及更新resource
-        List<Lock> locks = this.transactionLocks.get(transaction.getTransNum());
-        locks.removeAll(releaseLocks);
-        for (Lock releaseLock : releaseLocks) {
-            ResourceEntry childResource = this.getResourceEntry(releaseLock.name);
-            childResource.locks.remove(releaseLock);
-            List<String> names = releaseLock.name.getNames();
-            String name = names.get(names.size() - 1);
-            LockContext childContext = lockContext.childContext(name);
-            //父节点不为null时需要更新父节点的numchildlocks
-            if(childContext.parentContext()!=null){
-                Map<Long, Integer> numChildLocks = childContext.parentContext().numChildLocks;
-                numChildLocks.put(transaction.getTransNum(),numChildLocks.getOrDefault(transaction.getTransNum(),1)-1);
-            }
-        }
-
-
-    }
 }
+
+
 

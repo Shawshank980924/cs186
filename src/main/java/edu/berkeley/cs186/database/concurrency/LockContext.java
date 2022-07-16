@@ -190,18 +190,31 @@ public class LockContext {
             }
             }
         LockType oldLockType = this.lockman.getLockType(transaction, resourceName);
-        if(oldLockType.equals(LockType.SIX)){
+        long transNum = transaction.getTransNum();
+        //若提升为SIX，需要释放其下的所有锁
+        if(newLockType.equals(LockType.SIX)){
+            //获取所有子节点资源
             List<ResourceName> sisDs = sisDescendants(transaction);
+            //对所有的子节点资源的父节点的numchildrenlocks进行更新
             for (ResourceName sisD : sisDs) {
                 List<String> names = sisD.getNames();
                 String name = names.get(names.size() - 1);
                 LockContext childLockContext = childContext(name);
-                childLockContext.release(transaction);
+                if(childLockContext.parentContext()!=null){
+                    Map<Long, Integer> numChildLocks = childLockContext.parentContext().numChildLocks;
+                    numChildLocks.put(transNum,numChildLocks.get(transNum)-1);
+                }
+
+//                childLockContext.release(transaction);
             }
+            sisDs.add(this.getResourceName());
+            this.lockman.acquireAndRelease(transaction,getResourceName(),newLockType,sisDs);
+            return ;
         }
         else if(newLockType.equals(LockType.SIX)&&hasSIXAncestor(transaction)){
             throw new InvalidLockException("hasSIXAncestor");
         }
+
         this.lockman.promote(transaction,getResourceName(),newLockType);
 
 
@@ -264,6 +277,9 @@ public class LockContext {
         List<Lock> locks = this.lockman.getLocks(transaction);
         //需要拿到该层以下所有的resource
         List<Lock> releaseLocks = new ArrayList<>();
+        List<ResourceName> resourceNames = new ArrayList<>();
+        //注意要先释放自己
+        resourceNames.add(resourceName);
         //默认更改为S类型
         LockType toType = LockType.S;
         if(currentLockType.equals(LockType.SIX)||currentLockType.equals(LockType.IX)){
@@ -271,17 +287,24 @@ public class LockContext {
         }
         for (Lock lock : locks) {
             if(lock.name.isDescendantOf(resourceName)){
-//                //底层存在非IS或者S的替换为X
+//                //底层存在非IS或者S的替换为X,这里的注释掉因为不符合测试文件的要求
 //                if(!lock.lockType.equals(LockType.S)&&!lock.lockType.equals(LockType.IS)){
 //                    toType = LockType.X;
 //                }
-                releaseLocks.add(lock);
+//                releaseLocks.add(lock);
+                resourceNames.add(lock.name);
+                List<String> names = lock.name.getNames();
+                String childName = names.get(names.size() - 1);
+                LockContext childContext = this.childContext(childName);
+                //父节点不为null时需要更新父节点的numchildlocks
+                if(childContext.parentContext()!=null){
+                    Map<Long, Integer> numChildLocks = childContext.parentContext().numChildLocks;
+                    numChildLocks.put(transaction.getTransNum(),numChildLocks.get(transaction.getTransNum())-1);
+                }
             }
         }
 //        System.out.println(toType);
-        synchronized (this.lockman){
-            this.lockman.escalateHelper(transaction,releaseLocks,this,toType);
-        }
+        this.lockman.acquireAndRelease(transaction,resourceName,toType,resourceNames);
 //        System.out.println(this.getEffectiveLockType(transaction));
 
 
