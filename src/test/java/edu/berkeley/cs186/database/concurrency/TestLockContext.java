@@ -75,7 +75,9 @@ public class TestLockContext {
     @Category(PublicTests.class)
     public void testSimpleAcquirePass() {
         dbLockContext.acquire(transactions[0], LockType.IS);
+        List<Lock> locks1 = dbLockContext.lockman.getLocks(transactions[0]);
         tableLockContext.acquire(transactions[0], LockType.S);
+        List<Lock> locks2 = dbLockContext.lockman.getLocks(transactions[0]);
         // both locks should have been acquired
         Assert.assertEquals(Arrays.asList(new Lock(dbLockContext.getResourceName(), LockType.IS, 0L),
                                           new Lock(tableLockContext.getResourceName(), LockType.S, 0L)),
@@ -225,6 +227,8 @@ public class TestLockContext {
         TransactionContext t1 = transactions[1];
         dbLockContext.acquire(t1, LockType.S);
         dbLockContext.promote(t1, LockType.X);
+//        LockType effectiveLockType = dbLockContext.getEffectiveLockType(t1);
+//        System.out.println(effectiveLockType.toString());
         assertTrue(TestLockManager.holds(lockManager, t1, dbLockContext.getResourceName(), LockType.X));
     }
 
@@ -367,6 +371,7 @@ public class TestLockContext {
             tableContext.acquire(t1, LockType.IX);
             fail();
         } catch (UnsupportedOperationException e) {
+//            System.out.println(e);
             // do nothing
         }
         try {
@@ -374,12 +379,14 @@ public class TestLockContext {
             fail();
         } catch (UnsupportedOperationException e) {
             // do nothing
+//            System.out.println(e);
         }
         try {
             tableContext.promote(t1, LockType.IX);
             fail();
         } catch (UnsupportedOperationException e) {
             // do nothing
+//            System.out.println(e);
         }
         try {
             tableContext.escalate(t1);
