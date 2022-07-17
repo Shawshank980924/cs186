@@ -3,13 +3,13 @@
 💡  第四个proj就主要实现并行查询和修改过程中多粒度锁的使用和释放，从lockManger底层开始往上LockContext再到LockUtil完成一层又一层的封装，该project主要分为两个部分
 
 1. part1 Queuing 分为两个个task
-    1. 主要理解IS IX SIX S X这几个锁之间的相互兼容和替代关系
-    1. 实现最底层几个锁的获取释放方法，并实现queuing logic并学会运用synchronized实现原子性和有序性代码
+   1. 主要理解IS IX SIX S X这几个锁之间的相互兼容和替代关系
+   1. 实现最底层几个锁的获取释放方法，并实现queuing logic并学会运用synchronized实现原子性和有序性代码
 2. part2 分为三个task
-    1. lockContext封装LockManger的方法并执行多粒度锁限制条件的检查
-    1. 封装LockContext的方法并自动判断和调整ancestors节点和当前层节点锁状态
-    1. 实现strict 2PL
-       :::
+   1. lockContext封装LockManger的方法并执行多粒度锁限制条件的检查
+   1. 封装LockContext的方法并自动判断和调整ancestors节点和当前层节点锁状态
+   1. 实现strict 2PL
+      :::
 ## Part-1：Task 1 LockType
 
 - [x] project中涉及的几种锁的特性
@@ -131,19 +131,19 @@ except是一种特殊情况，一般来说兼容性检查应该对于不同的tr
 三个
 
 1. acquireAndRelease：
-    1. 若原来该transaction对该资源就持有锁，需要判断是否在releaseNames中是否存在自身，若不存在才需要抛出错误
-    1. 为了代码的健壮性，checcompatibility以后具体执行的时候应该先释放锁然后再获取锁，因为若先获取可能出现原资源已有锁且不可替换的情况
-    1. releaseNames上的锁必须全部存在
+   1. 若原来该transaction对该资源就持有锁，需要判断是否在releaseNames中是否存在自身，若不存在才需要抛出错误
+   1. 为了代码的健壮性，checcompatibility以后具体执行的时候应该先释放锁然后再获取锁，因为若先获取可能出现原资源已有锁且不可替换的情况
+   1. releaseNames上的锁必须全部存在
 2. acquire
-    1. 只有队列为空且与当前该资源持有的锁兼容时才能直接获取锁，否则需要再队列中追加
-    1. 与前者不同，不允许锁的升级，因为grantUpdate中有锁替换的逻辑，所以doubleLock的判断需要在acquire就完成
+   1. 只有队列为空且与当前该资源持有的锁兼容时才能直接获取锁，否则需要再队列中追加
+   1. 与前者不同，不允许锁的升级，因为grantUpdate中有锁替换的逻辑，所以doubleLock的判断需要在acquire就完成
 3. release
-    1. 这里有个坑点，观察getLock函数`return new ArrayList<>(transactionLocks.getOrDefault(transaction.getTransNum(),Collections._emptyList_()));`返回的不是一个transactionLocks Map value的一个引用还是复刻了一个ArrayList，所以删除不能用这个方法来获取该transaction持有的所有锁，而是直接调用transactionLocks.get
-    1. release有两个地方的锁需要释放，一个是在transactionLocks中维护的该transaction对该resource持有的锁，这个应该在release母函数中完成，另一个是在ResourceEntry中维护该资源的持有锁中删除该transaction对应的锁，对应的是`ResourceEntry.releaseLock`方法
-    1. 这里需要边遍历边删除必须使用迭代器才能安全删除即`iterator.remove`
-    1. 释放一个锁以后需要调用`processQueue`因为持有锁变化后可能可以推进队列，获取新的锁，注意`processQueue`中应该是个循环判断逻辑获取锁直到无法继续获取为止
+   1. 这里有个坑点，观察getLock函数`return new ArrayList<>(transactionLocks.getOrDefault(transaction.getTransNum(),Collections._emptyList_()));`返回的不是一个transactionLocks Map value的一个引用还是复刻了一个ArrayList，所以删除不能用这个方法来获取该transaction持有的所有锁，而是直接调用transactionLocks.get
+   1. release有两个地方的锁需要释放，一个是在transactionLocks中维护的该transaction对该resource持有的锁，这个应该在release母函数中完成，另一个是在ResourceEntry中维护该资源的持有锁中删除该transaction对应的锁，对应的是`ResourceEntry.releaseLock`方法
+   1. 这里需要边遍历边删除必须使用迭代器才能安全删除即`iterator.remove`
+   1. 释放一个锁以后需要调用`processQueue`因为持有锁变化后可能可以推进队列，获取新的锁，注意`processQueue`中应该是个循环判断逻辑获取锁直到无法继续获取为止
 4. promote
-    1. NL不可promote，同一个transaction promote的锁与之前相同也不可，然后再判断是否兼容，注意不可替换的判断应该在promote中判断，grantUpdate是直接替换的
+   1. NL不可promote，同一个transaction promote的锁与之前相同也不可，然后再判断是否兼容，注意不可替换的判断应该在promote中判断，grantUpdate是直接替换的
 ## Part-2：Task 3: LockContext
 ![image.png](https://cdn.nlark.com/yuque/0/2022/png/25488814/1658037875816-48ed0f2d-65b6-44df-a79d-675af5551743.png#clientId=ua1996f64-888b-4&crop=0&crop=0&crop=1&crop=1&from=paste&id=u3a159407&margin=%5Bobject%20Object%5D&name=image.png&originHeight=456&originWidth=986&originalType=url&ratio=1&rotation=0&showTitle=false&size=81408&status=done&style=none&taskId=ud1e07272-9990-43a8-b770-ff7c4b3c2a7&title=)
 根据proj4的架构图，在实现lockManager以后，实现了对于不同资源和不同transaction持有锁以及queuing logic的维护，上一层是LockContext，在这一层里通过locktext对象管理不同级别的resource，这一层级的锁的获取和释放不仅仅是调用lockManager，而且还会检查和更新ancestors和Descendants持有锁的状态确保符合多粒度锁限制条件Multigranularity constrains，也就是canBeparent等的限制条件
@@ -158,19 +158,19 @@ getExplicitLockType用于得到某transaction在该资源下显式带的锁即`t
 几个函数的实现流程基本内容主要分为检查Multigranularity constrains和调用lockManager的相关函数
 
 1. acquire
-    1. 注意是否有锁抛错应该用的是effectiveLock
-    1. 除了通过canBeParent判断父节点的合法性以外需要更新父节点的lockcontext中维护的子节点的锁的数量
+   1. 注意是否有锁抛错应该用的是effectiveLock
+   1. 除了通过canBeParent判断父节点的合法性以外需要更新父节点的lockcontext中维护的子节点的锁的数量
 2. release
-    1. 通过numchildren来判断子节点中是否持有显式锁，注意numchildren存储的是显式锁数量，隐式锁不计入，若持有抛错
-    1. 同上记得更新numchildren
+   1. 通过numchildren来判断子节点中是否持有显式锁，注意numchildren存储的是显式锁数量，隐式锁不计入，若持有抛错
+   1. 同上记得更新numchildren
 3. promote
-    1. 由于SIX在代码文档中特别说明，SIX下只能存在IX X两种显式锁，所以在提升为SIX之前需要释放descendants中所有的S 和IS锁（**其实我觉得应该还要释放SIX锁**），以及还要保证该点以上不能存在SIX节点
-    1. 在SIX情况下由于应该只能调用lockManger一次实现原子性，中间状态不可见，一次性的释放多个锁应该调用acquireAndRelease函数，其余情况直接调用lockManager.promote即可
-    1. 注意释放锁中除了自己以外其他锁的父节点的numchildren都应该改变
+   1. 由于SIX在代码文档中特别说明，SIX下只能存在IX X两种显式锁，所以在提升为SIX之前需要释放descendants中所有的S 和IS锁（**其实我觉得应该还要释放SIX锁**），以及还要保证该点以上不能存在SIX节点
+   1. 在SIX情况下由于应该只能调用lockManger一次实现原子性，中间状态不可见，一次性的释放多个锁应该调用acquireAndRelease函数，其余情况直接调用lockManager.promote即可
+   1. 注意释放锁中除了自己以外其他锁的父节点的numchildren都应该改变
 4. escalate
-    1. 这个函数作用就是回收所有下层资源的细粒度锁，以最小代价转为该层的粗粒度锁（限制为S或者X）但我觉得它文档描述和测试文件中略有不符，按文档理解应该遍历所有的子节点判断是否存在带X锁的资源节点，若没有则该层转化为S，若有则该层转化为X，但从`testEscalateIXX`来看只是从该层现在带的锁来进行判断，若该层带S或者X，表明无需处理直接返回；若该层带IX或者SIX，转化为X；其余情况均转化为S锁
-    1. 3.b中相同需要使用acquireAndRelease方法实现只调用一次lockManager
-    1. `LockContext._fromResourceName_`_静态方法可以帮助获取下层的lockContext_
+   1. 这个函数作用就是回收所有下层资源的细粒度锁，以最小代价转为该层的粗粒度锁（限制为S或者X）但我觉得它文档描述和测试文件中略有不符，按文档理解应该遍历所有的子节点判断是否存在带X锁的资源节点，若没有则该层转化为S，若有则该层转化为X，但从`testEscalateIXX`来看只是从该层现在带的锁来进行判断，若该层带S或者X，表明无需处理直接返回；若该层带IX或者SIX，转化为X；其余情况均转化为S锁
+   1. 3.b中相同需要使用acquireAndRelease方法实现只调用一次lockManager
+   1. `LockContext._fromResourceName_`_静态方法可以帮助获取下层的lockContext_
 ## Part-2：Task 4: LockUtil
 该层位于架构图的最上层，主要向用户封装lockContext锁的释放和使用，实现两个方面的作用
 
@@ -193,14 +193,14 @@ getExplicitLockType用于得到某transaction在该资源下显式带的锁即`t
 1. 当前层的锁等级大于等于request，这种情况下可以直接返回
 1. 当前带的锁是IX，request是S，这种情况下应该promote为SIX锁
 1. 当前的锁是intent lock，这种情况需要对request进行分类讨论详细分析一下：
-    1. 若request是X，那么X可以替换所有的I锁
-    1. 若request是S，那么S可以替换除了SIX和IX以外所有的I锁，而IX和SIX都包含在了以上两种情况下了（IX是2，SIX是1），在这种情况下无论request是S还是X都可以直接替换掉
-    1. 具体流程就是先ancestorEnsuring，然后在该层escalate，最后判断该层是否满足request，若不满足再进行promote
+   1. 若request是X，那么X可以替换所有的I锁
+   1. 若request是S，那么S可以替换除了SIX和IX以外所有的I锁，而IX和SIX都包含在了以上两种情况下了（IX是2，SIX是1），在这种情况下无论request是S还是X都可以直接替换掉
+   1. 具体流程就是先ancestorEnsuring，然后在该层escalate，最后判断该层是否满足request，若不满足再进行promote
 4. 剩下的情况是当前层effectiveLock不能覆盖request，而且当前持有的不是intent lock，只能是S或者NL
-    1. effectiveLock是NL，直接acquire
-    1. effectiveLock是S，这种情况下，S可能来源于自身带的锁，可能是来源于隐式锁
-        1. 若explicitLock是S，ancestorEnsuring后该层直接promote为request即可
-        1. 若explicitLock是NL，隐式锁可能来源于上层的S或者SIX，那么等价于改变上层的锁，递归调用本函数`_ensureSufficientLockHeld_(parentContext,requestType);`_即可_
+   1. effectiveLock是NL，直接acquire
+   1. effectiveLock是S，这种情况下，S可能来源于自身带的锁，可能是来源于隐式锁
+      1. 若explicitLock是S，ancestorEnsuring后该层直接promote为request即可
+      1. 若explicitLock是NL，隐式锁可能来源于上层的S或者SIX，那么等价于改变上层的锁，递归调用本函数`_ensureSufficientLockHeld_(parentContext,requestType);`_即可_
 ## Part-2：Task 5: Two-Phase Locking
 
 - [x] 关于什么是2PL，以及2PL和strict 2PL之间的区别
@@ -213,12 +213,12 @@ getExplicitLockType用于得到某transaction在该资源下显式带的锁即`t
 
 - [x] 关于释放锁的顺序和实现
 
-由于调用lockContext的release方法会首先检查子节点的锁是否释放完毕，所以锁的释放顺序必须是从下到上，实现的思路类似BFS的层序遍历，每一次取出numchildren为0 的locks，在释放的同时在队列中存入父节点同时更新父节点的numChildren直到队列为空，所有的锁均释放完毕
+由于调用lockContext的release方法会首先检查子节点的锁是否释放完毕，所以锁的释放顺序必须是从下到上，实现的思路类似BFS的层序遍历，每一次取出numchildren为0 的locks，在释放的同时更新父节点的numChildren直到list为空，所有的锁均释放完毕
 ## Testing
 需要写一个关于IX promote为_SIX的测试代码练练手_
 ```java
  @Test
-    public void testPromoteSIXSaturation() {
+public void testPromoteSIXSaturation() {
         // your test code here
         TransactionContext t1 = transactions[1];
         dbLockContext.acquire(t1,LockType.IX);
@@ -227,5 +227,5 @@ getExplicitLockType用于得到某transaction在该资源下显式带的锁即`t
         dbLockContext.promote(t1,LockType.SIX);
         assertEquals(0,dbLockContext.getNumChildren(t1));
 
-    }
+        }
 ```
