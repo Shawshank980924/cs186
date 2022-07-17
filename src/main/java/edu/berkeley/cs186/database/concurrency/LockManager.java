@@ -95,12 +95,14 @@ public class LockManager {
                 //若新加的lock的等级高需要进行替换,替换不改变获取锁的顺序
                 if (LockType.substitutable(lock.lockType, oldLock.lockType)) {
                     List<Lock> locks = LockManager.this.transactionLocks.get(lock.transactionNum);
-                    int index = locks.indexOf(oldLock);
+//                    int index = locks.indexOf(oldLock);
                     locks.remove(oldLock);
-                    locks.add(index, lock);
-                    index = this.locks.indexOf(oldLock);
+//                    locks.add(index, lock);
+                    locks.add(lock);
+//                    index = this.locks.indexOf(oldLock);
                     this.locks.remove(oldLock);
-                    this.locks.add(index, lock);
+//                    this.locks.add(index, lock);
+                    this.locks.add(lock);
                 }
                 //否则直接跳过即可
 
@@ -157,12 +159,14 @@ public class LockManager {
                 if (!this.checkCompatible(lock.lockType, lock.transactionNum)) {
                     break;
                 }
-                //只要不冲突，就在locks中加入这把锁
-                grantOrUpdateLock(lock);
                 //对于acquireAndRelease来说还需要释放锁
                 for (Lock releaseLock : releasedLocks) {
                     releaseLock(releaseLock);
                 }
+                //只要不冲突，就在locks中加入这把锁
+                grantOrUpdateLock(lock);
+
+
                 requests.remove();
                 //unblock这个transaction
                 transaction.unblock();
@@ -369,6 +373,7 @@ public class LockManager {
                 if (next.name.equals(name)) {
                     iterator.remove();
                     resourceEntry.releaseLock(next);
+                    break;
                     //release 锁可能可以前进
 
                 }

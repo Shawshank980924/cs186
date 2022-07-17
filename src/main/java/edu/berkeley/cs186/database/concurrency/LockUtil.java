@@ -43,7 +43,7 @@ public class LockUtil {
 
         // TODO(proj4_part2): implement
         if(LockType.substitutable(effectiveLockType,requestType)){
-            //说明当前获取的锁等级已经高于requestType，这样可以直接返回
+            //说明当前获取的锁等级已经大于等于requestType，这样可以直接返回
             //注意这里已经包含了SIX>S的这种情况
             return ;
         }

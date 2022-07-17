@@ -930,8 +930,8 @@ public class Database implements AutoCloseable {
                 LockManager lockManager = Database.this.getLockManager();
                 LockContext databaseContext = lockManager.databaseContext();
                 List<Lock> locks = lockManager.getLocks(this);
-//                //因为锁的加入顺序必定是从上往下的，所以倒着遍历去
-                //但是如果有require and release同时释放顶层和自己的锁
+
+                //每一次循环取出numChildren为0的资源，释放相关锁，同时更新父节点，
                 while(!locks.isEmpty()){
                     Iterator<Lock> iterator = locks.iterator();
                     while(iterator.hasNext()){
@@ -945,12 +945,6 @@ public class Database implements AutoCloseable {
                         }
                     }
                 }
-//                for(int i=locks.size()-1;i>=0;i--){
-//                    Lock lock = locks.get(i);
-//                    ResourceName name = lock.name;
-//                    LockContext lockContext = LockContext.fromResourceName(lockManager, name);
-//                    lockContext.release(this);
-//                }
 
 
                 return;

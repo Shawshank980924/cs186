@@ -96,18 +96,19 @@ public class LockContext {
     public void acquire(TransactionContext transaction, LockType lockType)
             throws InvalidLockException, DuplicateLockRequestException {
         // TODO(proj4_part2): implement
-        //首先获取当前层以及ancestors的resources name
+        //首先获取当前层的resources name
         ResourceName resourceName = getResourceName();
-        //判断若获取该层的锁会不会与之前LockType中的多粒度锁的限制有冲突
         //获取当前层的effectiveLock
         LockType effectiveLockType = getEffectiveLockType(transaction);
+        //若带锁直接抛错
         if(!effectiveLockType.equals(LockType.NL)) {
             throw new DuplicateLockRequestException(transaction.toString()+"already had lock on"+ resourceName.toString() );
         }
+        //只读的资源不能获取新的锁
         if(this.readonly) {
             throw new UnsupportedOperationException("readonly");
         }
-        //判断若不是第一层，获取后其父节点是否还合法
+        //若不是第一层，判断获取后其父节点是否还合法
         LockContext parentContext = this.parentContext();
         if(parentContext!=null){
             LockType pcLockType = parentContext.getEffectiveLockType(transaction);
@@ -184,6 +185,7 @@ public class LockContext {
             throw new UnsupportedOperationException("readonly");
         }
         ResourceName resourceName = this.getResourceName();
+        //判断若promote以后父节点是否合法
         if(this.parentContext()!=null){
             if(!LockType.canBeParentLock(this.parentContext().getEffectiveLockType(transaction),newLockType)){
                 throw new InvalidLockException("can't be parent");
@@ -191,7 +193,7 @@ public class LockContext {
         }
         LockType oldLockType = this.lockman.getLockType(transaction, resourceName);
         long transNum = transaction.getTransNum();
-        //若提升为SIX，需要释放其下的所有锁
+        //若提升为SIX，需要释放其下的S IS锁
         if(newLockType.equals(LockType.SIX)){
             //获取所有子节点资源
             List<ResourceName> sisDs = sisDescendants(transaction);
@@ -263,7 +265,7 @@ public class LockContext {
         if(currentLockType.equals(LockType.NL)){
             throw new NoLockHeldException(this.toString());
         }
-        //若当前的LockType是S或者X，下层必定已经带了S或者X直接返回，没有这个过不了幂等性测试
+        //若当前的LockType是S或者X，下层必定已经带了S或者X直接返回
         if(!currentLockType.isIntent()){
             return;
         }
@@ -274,24 +276,27 @@ public class LockContext {
         //需要拿到该层以下所有的resource
         List<Lock> releaseLocks = new ArrayList<>();
         List<ResourceName> resourceNames = new ArrayList<>();
-        //注意要先释放自己
+        //注意要释放自己
         resourceNames.add(resourceName);
         //默认更改为S类型
         LockType toType = LockType.S;
         if(currentLockType.equals(LockType.SIX)||currentLockType.equals(LockType.IX)){
             toType = LockType.X;
         }
+        //遍历该transaction带的所有锁
         for (Lock lock : locks) {
+            //若该锁位于该层以下则需要释放
             if(lock.name.isDescendantOf(resourceName)){
 //                //底层存在非IS或者S的替换为X,这里的注释掉因为不符合测试文件的要求
 //                if(!lock.lockType.equals(LockType.S)&&!lock.lockType.equals(LockType.IS)){
 //                    toType = LockType.X;
 //                }
 //                releaseLocks.add(lock);
+                //获取该锁的lockContext
+                ResourceName name = lock.name;
+                LockContext childContext = LockContext.fromResourceName(lockman, name);
+                //加入释放锁List
                 resourceNames.add(lock.name);
-                List<String> names = lock.name.getNames();
-                String childName = names.get(names.size() - 1);
-                LockContext childContext = this.childContext(childName);
                 //父节点不为null时需要更新父节点的numchildlocks
                 if(childContext.parentContext()!=null){
                     Map<Long, Integer> numChildLocks = childContext.parentContext().numChildLocks;
