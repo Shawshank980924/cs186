@@ -102,6 +102,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         transactionTableEntry.lastLSN = newLSN;
         //flush log records
         logManager.flushToLSN(newLSN);
+
         return newLSN;
     }
 
@@ -148,7 +149,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
             //首先需要拿到该transaction的第一个LSN
             long firstLSN = getFirstLSN(transNum);
             //调用回滚函数
-            rollbackToLSN(transNum,firstLSN-1);
+            rollbackToLSN(transNum,firstLSN);
         }
         //更新transaction table以及append log record
         transactionTable.remove(transNum);
@@ -162,6 +163,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         long lastLSN = transactionTable.get(transNum).lastLSN;
         while(true){
             LogRecord logRecord = logManager.fetchLogRecord(lastLSN);
+//            System.out.println(logRecord.toString());
             Optional<Long> prevLSN = logRecord.getPrevLSN();
             if(!prevLSN.isPresent()){
                 break;
@@ -262,7 +264,17 @@ public class ARIESRecoveryManager implements RecoveryManager {
         assert (before.length == after.length);
         assert (before.length <= BufferManager.EFFECTIVE_PAGE_SIZE / 2);
         // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry transactionEntry = transactionTable.get(transNum);
+        long prevLSN = transactionEntry.lastLSN;
+        long newLSN = logManager.appendToLog(new UpdatePageLogRecord(transNum,pageNum,prevLSN,pageOffset,before,after));
+        //更新lastLSN
+        transactionEntry.lastLSN = newLSN;
+        //更新DPT
+        if(!dirtyPageTable.containsKey(pageNum)){
+            dirtyPageTable.put(pageNum,newLSN);
+        }
+
+        return newLSN;
     }
 
     /**
