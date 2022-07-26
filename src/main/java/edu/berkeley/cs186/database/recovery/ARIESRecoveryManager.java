@@ -93,7 +93,16 @@ public class ARIESRecoveryManager implements RecoveryManager {
     @Override
     public long commit(long transNum) {
         // TODO(proj5): implement
-        return -1L;
+        //在commit之前需要先写log，改变transaction table的状态
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        transactionTableEntry.transaction.setStatus(Transaction.Status.COMMITTING);
+        //追加log,先得到当前transaction的last LSN作为log record中的prevLSN
+        long lastLSN = transactionTableEntry.lastLSN;
+        long newLSN = logManager.appendToLog(new CommitTransactionLogRecord(transNum, lastLSN));
+        transactionTableEntry.lastLSN = newLSN;
+        //flush log records
+        logManager.flushToLSN(newLSN);
+        return newLSN;
     }
 
     /**
@@ -109,7 +118,12 @@ public class ARIESRecoveryManager implements RecoveryManager {
     @Override
     public long abort(long transNum) {
         // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        transactionTableEntry.transaction.setStatus(Transaction.Status.ABORTING);
+        long lastLSN = transactionTableEntry.lastLSN;
+        long newLSN = logManager.appendToLog(new AbortTransactionLogRecord(transNum, lastLSN));
+        transactionTableEntry.lastLSN = newLSN;
+        return newLSN;
     }
 
     /**
@@ -127,7 +141,34 @@ public class ARIESRecoveryManager implements RecoveryManager {
     @Override
     public long end(long transNum) {
         // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        Transaction.Status oldStatus = transactionTableEntry.transaction.getStatus();
+        if(oldStatus.equals(Transaction.Status.ABORTING)){
+            //若原来的transaction status是abort则需要回滚
+            //首先需要拿到该transaction的第一个LSN
+            long firstLSN = getFirstLSN(transNum);
+            //调用回滚函数
+            rollbackToLSN(transNum,firstLSN-1);
+        }
+        //更新transaction table以及append log record
+        transactionTable.remove(transNum);
+        transactionTableEntry.transaction.setStatus(Transaction.Status.COMPLETE);
+        long lastLSN = transactionTableEntry.lastLSN;
+        long newLSN = logManager.appendToLog(new EndTransactionLogRecord(transNum, lastLSN));
+        transactionTableEntry.lastLSN = newLSN;
+        return newLSN;
+    }
+    public long getFirstLSN(long transNum){
+        long lastLSN = transactionTable.get(transNum).lastLSN;
+        while(true){
+            LogRecord logRecord = logManager.fetchLogRecord(lastLSN);
+            Optional<Long> prevLSN = logRecord.getPrevLSN();
+            if(!prevLSN.isPresent()){
+                break;
+            }
+            lastLSN = prevLSN.get();
+        }
+        return lastLSN;
     }
 
     /**
@@ -155,6 +196,22 @@ public class ARIESRecoveryManager implements RecoveryManager {
         // back from the next record that hasn't yet been undone.
         long currentLSN = lastRecord.getUndoNextLSN().orElse(lastRecordLSN);
         // TODO(proj5) implement the rollback logic described above
+        while(Long.compare(currentLSN,LSN)>0){
+            //当前的LSN可以undo
+            LogRecord logRecord = logManager.fetchLogRecord(currentLSN);
+            if(logRecord.isUndoable()){
+                //插入CLR log record,方法的调用者
+                LogRecord undoLog = logRecord.undo(transactionEntry.lastLSN);
+//                System.out.println(undoLog.toString());
+
+                long newLSN = logManager.appendToLog(undoLog);
+                transactionEntry.lastLSN = newLSN;
+                undoLog.redo(this,this.diskSpaceManager,this.bufferManager);
+            }
+            currentLSN = logRecord.getUndoNextLSN().orElse(logRecord.getPrevLSN().orElse(LSN));
+//            lastRecord = logManager.fetchLogRecord(transactionEntry.lastLSN);
+        }
+
     }
 
     /**
