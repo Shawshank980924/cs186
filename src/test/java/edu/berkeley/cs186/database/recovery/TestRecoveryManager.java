@@ -488,6 +488,7 @@ public class TestRecoveryManager {
 
         Map<Long, Pair<Transaction.Status, Long>> txnTable = endCheckpoint.getTransactionTable();
         Map<Long, Long> dpt = endCheckpoint.getDirtyPageTable();
+//        System.out.println(dpt);
         assertEquals(firstWriteLSN, (long) dpt.get(10000000001L));
         assertEquals(new Pair<>(Transaction.Status.RUNNING, firstWriteLSN), txnTable.get(1L));
     }
@@ -526,7 +527,9 @@ public class TestRecoveryManager {
 
         // Next 3 logs should be from the checkpoint
         LogRecord beginCheckpoint = logs.next();
+//        System.out.println(beginCheckpoint.LSN);
         LogRecord endCheckpoint1 = logs.next();
+//        System.out.println(endCheckpoint1.toString());
         LogRecord endCheckpoint2 = logs.next();
         assertEquals(LogType.BEGIN_CHECKPOINT, beginCheckpoint.getType());
         assertEquals(LogType.END_CHECKPOINT, endCheckpoint1.getType());

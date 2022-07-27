@@ -273,6 +273,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         if(!dirtyPageTable.containsKey(pageNum)){
             dirtyPageTable.put(pageNum,newLSN);
         }
+        logManager.flushToLSN(newLSN);
 
         return newLSN;
     }
@@ -450,6 +451,8 @@ public class ARIESRecoveryManager implements RecoveryManager {
         long savepointLSN = transactionEntry.getSavepoint(name);
 
         // TODO(proj5): implement
+        rollbackToLSN(transNum,savepointLSN);
+
         return;
     }
 
@@ -469,15 +472,54 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     @Override
     public synchronized void checkpoint() {
+
         // Create begin checkpoint log record and write to log
         LogRecord beginRecord = new BeginCheckpointLogRecord();
+//        System.out.println(beginRecord.LSN);
         long beginLSN = logManager.appendToLog(beginRecord);
+
+
+
 
         Map<Long, Long> chkptDPT = new HashMap<>();
         Map<Long, Pair<Transaction.Status, Long>> chkptTxnTable = new HashMap<>();
 
         // TODO(proj5): generate end checkpoint record(s) for DPT and transaction table
 
+//
+        int dptNum = 0,tranTableNum =0;
+        Iterator<Long> iterator = dirtyPageTable.keySet().iterator();
+        while(iterator.hasNext()){
+            if(!EndCheckpointLogRecord.fitsInOneRecord(dptNum+1,0)){
+                LogRecord endRecord = new EndCheckpointLogRecord(chkptDPT, chkptTxnTable);
+                long l = logManager.appendToLog(endRecord);
+//                System.out.println(l);
+//                flushToLSN(endRecord.getLSN());
+                chkptDPT = new HashMap<>();
+                chkptTxnTable = new HashMap<>();
+                dptNum = 0;
+            }
+            Long nextPageNum = iterator.next();
+            chkptDPT.put(nextPageNum,dirtyPageTable.get(nextPageNum));
+            dptNum++;
+        }
+//        System.out.println(chkptDPT.toString());
+        iterator = transactionTable.keySet().iterator();
+        while(iterator.hasNext()){
+            if(!EndCheckpointLogRecord.fitsInOneRecord(dptNum,tranTableNum+1)){
+                LogRecord endRecord = new EndCheckpointLogRecord(chkptDPT, chkptTxnTable);
+                logManager.appendToLog(endRecord);
+                chkptDPT = new HashMap<>();
+                chkptTxnTable = new HashMap<>();
+                tranTableNum=0;
+                dptNum=0;
+            }
+            Long nextTranNum = iterator.next();
+            TransactionTableEntry transactionEntry = transactionTable.get(nextTranNum);
+            Pair<Transaction.Status, Long> pair = new Pair<>(transactionEntry.transaction.getStatus(), transactionEntry.lastLSN);
+            chkptTxnTable.put(nextTranNum,pair);
+            tranTableNum++;
+        }
         // Last end checkpoint record
         LogRecord endRecord = new EndCheckpointLogRecord(chkptDPT, chkptTxnTable);
         logManager.appendToLog(endRecord);
