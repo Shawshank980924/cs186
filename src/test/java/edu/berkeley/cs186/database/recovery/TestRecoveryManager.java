@@ -696,8 +696,7 @@ public class TestRecoveryManager {
         //
         List<Long> LSNs = new ArrayList<>();
         LSNs.add(logManager.appendToLog(new UpdatePageLogRecord(1L, 10000000001L, 0L, (short) 0, before, after))); // 0
-        LSNs.add(logManager
-                .appendToLog(new UpdatePageLogRecord(1L, 10000000002L, LSNs.get(0), (short) 0, before, after))); // 1
+        LSNs.add(logManager.appendToLog(new UpdatePageLogRecord(1L, 10000000002L, LSNs.get(0), (short) 0, before, after))); // 1
         LSNs.add(logManager.appendToLog(new UpdatePageLogRecord(3L, 10000000003L, 0L, (short) 0, before, after))); // 2
         LSNs.add(logManager.appendToLog(new CommitTransactionLogRecord(1L, LSNs.get(1)))); // 3
         LSNs.add(logManager.appendToLog(new EndTransactionLogRecord(1L, LSNs.get(3)))); // 4
@@ -717,6 +716,12 @@ public class TestRecoveryManager {
 
         // 3. Run analysis phase of recovery
         recoveryManager.restartAnalysis();
+//        Iterator<LogRecord> It = logManager.scanFrom(10000L);
+//        while(It.hasNext()){
+//            System.out.println(It.next().toString());
+//        }
+        System.out.println(transactionTable.toString());
+        System.out.println(dirtyPageTable.toString());
 
         // 4 Checks for correct transaction table and
         // transaction table after running analysis
@@ -1405,12 +1410,14 @@ public class TestRecoveryManager {
         long LSN8 = record.LSN;
 
         record = logs.next();
+        System.out.println(record.toString());
         assertEquals(LogType.UNDO_UPDATE_PAGE, record.getType()); // Undo 6 (T3's write)
         assertEquals(LSN8, (long) record.getPrevLSN().orElseThrow(NoSuchElementException::new));
         assertEquals(LSNs[3], (long) record.getUndoNextLSN().orElseThrow(NoSuchElementException::new));
         long LSN9 = record.LSN;
 
         record = logs.next();
+        System.out.println(record.toString());
         assertEquals(LogType.UNDO_UPDATE_PAGE, record.getType()); // Undo 4 (T2's write)
         assertEquals(LSNs[7], (long) record.getPrevLSN().orElseThrow(NoSuchElementException::new));
         assertEquals(LSNs[1], (long) record.getUndoNextLSN().orElseThrow(NoSuchElementException::new));
@@ -1451,6 +1458,7 @@ public class TestRecoveryManager {
 
         logManager.fetchLogRecord(LSN1).redo(recoveryManager, diskSpaceManager,
                 bufferManager);
+//        System.out.println(recoveryManager.dirtyPageTable.toString());
 
         // flush everything - recovery tests should always start
         // with a clean load from disk, and here we want everything sent to disk first.

@@ -1,5 +1,6 @@
 package edu.berkeley.cs186.database.recovery;
 
+import com.sun.deploy.panel.DeleteFilesDialog;
 import edu.berkeley.cs186.database.Transaction;
 import edu.berkeley.cs186.database.common.Pair;
 import edu.berkeley.cs186.database.concurrency.DummyLockContext;
@@ -11,6 +12,8 @@ import edu.berkeley.cs186.database.recovery.records.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+
+import static edu.berkeley.cs186.database.Transaction.Status.*;
 
 /**
  * Implementation of ARIES.
@@ -95,7 +98,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         // TODO(proj5): implement
         //在commit之前需要先写log，改变transaction table的状态
         TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
-        transactionTableEntry.transaction.setStatus(Transaction.Status.COMMITTING);
+        transactionTableEntry.transaction.setStatus(COMMITTING);
         //追加log,先得到当前transaction的last LSN作为log record中的prevLSN
         long lastLSN = transactionTableEntry.lastLSN;
         long newLSN = logManager.appendToLog(new CommitTransactionLogRecord(transNum, lastLSN));
@@ -127,6 +130,14 @@ public class ARIESRecoveryManager implements RecoveryManager {
         return newLSN;
     }
 
+    public long abortRecovery(long transNum) {
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        transactionTableEntry.transaction.setStatus(RECOVERY_ABORTING);
+        long lastLSN = transactionTableEntry.lastLSN;
+        long newLSN = logManager.appendToLog(new AbortTransactionLogRecord(transNum, lastLSN));
+        transactionTableEntry.lastLSN = newLSN;
+        return newLSN;
+    }
     /**
      * Called when a transaction is cleaning up; this should roll back
      * changes if the transaction is aborting (see the rollbackToLSN helper
@@ -273,7 +284,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         if(!dirtyPageTable.containsKey(pageNum)){
             dirtyPageTable.put(pageNum,newLSN);
         }
-        logManager.flushToLSN(newLSN);
+//        logManager.flushToLSN(newLSN);
 
         return newLSN;
     }
@@ -627,9 +638,143 @@ public class ARIESRecoveryManager implements RecoveryManager {
         long LSN = masterRecord.lastCheckpointLSN;
         // Set of transactions that have completed
         Set<Long> endedTransactions = new HashSet<>();
+        //LSN是masterRecord中的beginRecord
+        Iterator<LogRecord> logIt = logManager.scanFrom(LSN);
+        //遍历所有beginCheckPoint后面的logRecords，重建DPT和TXN
+        //首先
+        while (logIt.hasNext()){
+            LogRecord logRecord = logIt.next();
+            LogType type = logRecord.type;
+            //* If the log record is for a transaction operation (getTransNum is present)
+            //     * - update the transaction table
+            if(logRecord.getTransNum().isPresent()){
+                Long transNum = logRecord.getTransNum().get();
+                //注意在transactionTable不存在需要利用newTransaction产生一个新的transaction
+                if(!transactionTable.containsKey(transNum)){
+                    transactionTable.put(transNum,new TransactionTableEntry(newTransaction.apply(transNum)));
+                }
+                TransactionTableEntry transactionTableEntry = transactionTable.get(transNum);
+                transactionTableEntry.lastLSN = logRecord.LSN;
+            }
+        //     * If the log record is page-related, update the dpt
+        //     *   - update/undoupdate page will dirty pages
+        //     *   - free/undoalloc page always flush changes to disk
+        //     *   - no action needed for alloc/undofree page
+            if(logRecord.getPageNum().isPresent()){
+                Long pageNum = logRecord.getPageNum().get();
+                if(type.equals(LogType.UNDO_UPDATE_PAGE)||type.equals(LogType.UPDATE_PAGE)){
+                    dirtyPage(pageNum,logRecord.LSN);
+
+                }
+                else if(type.equals(LogType.FREE_PAGE)||type.equals(LogType.UNDO_ALLOC_PAGE)){
+                    dirtyPageTable.remove(pageNum);
+                }
+                //其余情况无需修改dirty table
+            }
+            //* If the log record is for a change in transaction status:
+            //     * - if END_TRANSACTION: clean up transaction (Transaction#cleanup), remove
+            //     *   from txn table, and add to endedTransactions
+            //     * - update transaction status to COMMITTING/RECOVERY_ABORTING/COMPLETE
+            //     * - update the transaction table
+            if(type.equals(LogType.END_TRANSACTION)){
+                //因为之前已经判断过了，所以transactionTable必定存在这个transNum
+                Long transNum = logRecord.getTransNum().get();
+                TransactionTableEntry transactionTableEntry = transactionTable.get(transNum);
+                transactionTableEntry.transaction.cleanup();
+                transactionTableEntry.transaction.setStatus(Transaction.Status.COMPLETE);
+                transactionTable.remove(transNum);
+                endedTransactions.add(transNum);
+            }
+            else if(type.equals(LogType.ABORT_TRANSACTION)||type.equals(LogType.COMMIT_TRANSACTION)){
+                //这部分只要改动transactionTable的状态就行了
+                Long transNum = logRecord.getTransNum().get();
+                Transaction transaction = transactionTable.get(transNum).transaction;
+                transaction.setStatus(type.equals(LogType.ABORT_TRANSACTION)? RECOVERY_ABORTING: COMMITTING);
+            }
+            //* If the log record is an end_checkpoint record:
+            //     * - Copy all entries of checkpoint DPT (replace existing entries if any)
+            //     * - Skip txn table entries for transactions that have already ended
+            //     * - Add to transaction table if not already present
+            //     * - Update lastLSN to be the larger of the existing entry's (if any) and
+            //     *   the checkpoint's
+            //     * - The status's in the transaction table should be updated if it is possible
+            //     *   to transition from the status in the table to the status in the
+            //     *   checkpoint. For example, running -> aborting is a possible transition,
+            //     *   but aborting -> running is not.
+            if(type.equals(LogType.END_CHECKPOINT)){
+                //先强制类型转换
+                EndCheckpointLogRecord ECLR = (EndCheckpointLogRecord)logRecord;
+                Map<Long, Pair<Transaction.Status, Long>> ECLR_transTable = ECLR.getTransactionTable();
+                Map<Long, Long> ECLR_dpt = ECLR.getDirtyPageTable();
+                Iterator<Long> transIt = ECLR_transTable.keySet().iterator();
+                Iterator<Long> dptIt = ECLR_dpt.keySet().iterator();
+                while(dptIt.hasNext()){
+                    Long pageNum = dptIt.next();
+                    dirtyPageTable.put(pageNum,ECLR_dpt.get(pageNum));
+                }
+                while(transIt.hasNext()){
+                    Long transNum = transIt.next();
+                    if(endedTransactions.contains(transNum)){
+                        continue;
+                    }
+                    if(!transactionTable.containsKey(transNum)){
+                        transactionTable.put(transNum,new TransactionTableEntry(newTransaction.apply(transNum)));
+                    }
+                    Pair<Transaction.Status, Long> statusLongPair = ECLR_transTable.get(transNum);
+                    Transaction.Status status = statusLongPair.getFirst();
+                    Long lastLSN = statusLongPair.getSecond();
+                    TransactionTableEntry transactionTableEntry = transactionTable.get(transNum);
+                    //取较大的lastLSN
+                    transactionTableEntry.lastLSN = Math.max(transactionTableEntry.lastLSN,lastLSN);
+                    //根据status的正确转换关系set status
+                    if(possibleStatusChange(transactionTableEntry.transaction.getStatus(),status)){
+                        transactionTableEntry.transaction.setStatus(status);
+                    }
+                }
+
+
+            }
+
+        }
+        //* After all records are processed, cleanup and end transactions that are in
+        //     * the COMMITING state, and move all transactions in the RUNNING state to
+        //     * RECOVERY_ABORTING/emit an abort record.
+        Iterator<Long> iterator = transactionTable.keySet().iterator();
+        while (iterator.hasNext()){
+            Long transNum = iterator.next();
+            TransactionTableEntry transactionTableEntry = transactionTable.get(transNum);
+            Transaction transaction = transactionTableEntry.transaction;
+            Transaction.Status status = transaction.getStatus();
+            if(status.equals(COMMITTING)){
+                transaction.cleanup();
+                end(transNum);
+            }
+            else if(status.equals(RUNNING)){
+                abort(transNum);
+                transaction.setStatus(RECOVERY_ABORTING);
+            }
+            else if(status.equals(ABORTING)){
+                transaction.setStatus(RECOVERY_ABORTING);
+            }
+        }
+
         // TODO(proj5): implement
         return;
     }
+    public static boolean possibleStatusChange(Transaction.Status beginStaus, Transaction.Status endStatus){
+        switch (beginStaus){
+            case RUNNING:
+                return endStatus.equals(COMMITTING)||endStatus.equals(ABORTING)||endStatus.equals(RECOVERY_ABORTING);
+            case ABORTING:
+                return endStatus.equals(COMPLETE)||endStatus.equals(RECOVERY_ABORTING);
+            case COMMITTING:
+                return endStatus.equals(COMPLETE)||endStatus.equals(ABORTING)||endStatus.equals(RECOVERY_ABORTING);
+            case RECOVERY_ABORTING:
+                return endStatus.equals(COMPLETE);
+            default:
+                return false;
+            }
+        }
 
     /**
      * This method performs the redo pass of restart recovery.
@@ -645,7 +790,58 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     void restartRedo() {
         // TODO(proj5): implement
+        //得到dpt中最小的recLSN
+        Long minLSN = Long.MAX_VALUE;
+        Iterator<Long> it = dirtyPageTable.values().iterator();
+        while (it.hasNext()){
+            minLSN = Math.min(minLSN,it.next());
+        }
+        Iterator<LogRecord> logIt = logManager.scanFrom(minLSN);
+        while (logIt.hasNext()){
+            LogRecord logRecord = logIt.next();
+            LogType type = logRecord.type;
+            if(!logRecord.isRedoable())continue;
+            //若是对part的操作永远redo，因为对part的操作不写入磁盘？
+            if(isPartOperation(type)){
+                logRecord.redo(this,diskSpaceManager,bufferManager);
+            }
+            //allocates a page (AllocPage/UndoFreePage), always redo it
+            else if(type.equals(LogType.ALLOC_PAGE)||type.equals(LogType.UNDO_FREE_PAGE)){
+                logRecord.redo(this,diskSpaceManager,bufferManager);
+            }
+            else if(isModifyPageOperation(type)){
+                Long pageNum = logRecord.getPageNum().get();
+                //若pageNum在DPT中存在且LSN>=recLSN说明还没刷入磁盘，需要redo
+                if(dirtyPageTable.containsKey(pageNum)){
+                    Page page = bufferManager.fetchPage(new DummyLockContext(), pageNum);
+                    Long pageLSN = page.getPageLSN();
+                    try {
+                        // Do anything that requires the page here
+                        //若disk上的pageLSN小于当前的LSN说明还未写入磁盘
+                        if(pageLSN<logRecord.LSN&&dirtyPageTable.get(pageNum)<=logRecord.LSN){
+                            logRecord.redo(this,diskSpaceManager,bufferManager);
+                        }
+                        if(pageLSN>=dirtyPageTable.get(pageNum)){
+                            dirtyPageTable.remove(pageNum);
+                        }
+                    } finally {
+                        page.unpin();
+                    }
+
+                }
+            }
+
+
+
+
+        }
         return;
+    }
+    public static boolean isPartOperation(LogType type){
+        return type.equals(LogType.ALLOC_PART)||type.equals(LogType.FREE_PART)||type.equals(LogType.UNDO_FREE_PART)||type.equals(LogType.UNDO_ALLOC_PART);
+    }
+    public static boolean isModifyPageOperation(LogType type){
+        return type.equals(LogType.UPDATE_PAGE)||type.equals(LogType.UNDO_UPDATE_PAGE)||type.equals(LogType.UNDO_ALLOC_PAGE)||type.equals(LogType.FREE_PAGE);
     }
 
     /**
@@ -661,6 +857,52 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     void restartUndo() {
         // TODO(proj5): implement
+        PriorityQueue<Long> lastLSNs = new PriorityQueue<>(new Comparator<Long>() {
+            @Override
+            public int compare(Long o1, Long o2) {
+                return o2.compareTo(o1);
+            }
+        });
+        Iterator<TransactionTableEntry> it = transactionTable.values().iterator();
+        while(it.hasNext()){
+            TransactionTableEntry tte = it.next();
+            if(tte.transaction.getStatus().equals(RECOVERY_ABORTING)){
+                lastLSNs.add(tte.lastLSN);
+
+            }
+
+        }
+        while (!lastLSNs.isEmpty()){
+            Long nowLSN = lastLSNs.poll();
+            LogRecord logRecord = logManager.fetchLogRecord(nowLSN);
+            Long transNum = logRecord.getTransNum().get();
+            TransactionTableEntry transactionEntry = transactionTable.get(transNum);
+            if(logRecord.isUndoable()){
+                LogRecord undoLog = logRecord.undo(transactionEntry.lastLSN);
+//                System.out.println(undoLog.toString());
+
+                long newLSN = logManager.appendToLog(undoLog);
+                transactionEntry.lastLSN = newLSN;
+                undoLog.redo(this,this.diskSpaceManager,this.bufferManager);
+                nowLSN = newLSN;
+            }
+            logRecord = logManager.fetchLogRecord(nowLSN);
+            //若本身就是CLR直接取出下一个UndoLSN,否则取prevLSN
+            Long nextLSN = logRecord.getUndoNextLSN().orElse(logRecord.getPrevLSN().get());
+            //prevLSN为0的情况下，end transaction
+            if(nextLSN ==0L){
+                TransactionTableEntry transactionTableEntry = transactionTable.get(transNum);
+                transactionTable.remove(transNum);
+                transactionTableEntry.transaction.cleanup();
+                transactionTableEntry.transaction.setStatus(Transaction.Status.COMPLETE);
+                long lastLSN = transactionTableEntry.lastLSN;
+                long newLSN = logManager.appendToLog(new EndTransactionLogRecord(transNum, lastLSN));
+                transactionTableEntry.lastLSN = newLSN;
+            }
+            else{
+                lastLSNs.add(nextLSN);
+            }
+        }
         return;
     }
 
