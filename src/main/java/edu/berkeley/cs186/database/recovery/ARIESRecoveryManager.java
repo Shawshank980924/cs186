@@ -130,14 +130,6 @@ public class ARIESRecoveryManager implements RecoveryManager {
         return newLSN;
     }
 
-    public long abortRecovery(long transNum) {
-        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
-        transactionTableEntry.transaction.setStatus(RECOVERY_ABORTING);
-        long lastLSN = transactionTableEntry.lastLSN;
-        long newLSN = logManager.appendToLog(new AbortTransactionLogRecord(transNum, lastLSN));
-        transactionTableEntry.lastLSN = newLSN;
-        return newLSN;
-    }
     /**
      * Called when a transaction is cleaning up; this should roll back
      * changes if the transaction is aborting (see the rollbackToLSN helper
@@ -222,7 +214,6 @@ public class ARIESRecoveryManager implements RecoveryManager {
                 undoLog.redo(this,this.diskSpaceManager,this.bufferManager);
             }
             currentLSN = logRecord.getUndoNextLSN().orElse(logRecord.getPrevLSN().orElse(LSN));
-//            lastRecord = logManager.fetchLogRecord(transactionEntry.lastLSN);
         }
 
     }
@@ -281,10 +272,10 @@ public class ARIESRecoveryManager implements RecoveryManager {
         //更新lastLSN
         transactionEntry.lastLSN = newLSN;
         //更新DPT
-        if(!dirtyPageTable.containsKey(pageNum)){
-            dirtyPageTable.put(pageNum,newLSN);
-        }
-//        logManager.flushToLSN(newLSN);
+        dirtyPage(pageNum,newLSN);
+//        if(!dirtyPageTable.containsKey(pageNum)){
+//            dirtyPageTable.put(pageNum,newLSN);
+//        }
 
         return newLSN;
     }
@@ -768,7 +759,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
             case ABORTING:
                 return endStatus.equals(COMPLETE)||endStatus.equals(RECOVERY_ABORTING);
             case COMMITTING:
-                return endStatus.equals(COMPLETE)||endStatus.equals(ABORTING)||endStatus.equals(RECOVERY_ABORTING);
+                return endStatus.equals(COMPLETE);
             case RECOVERY_ABORTING:
                 return endStatus.equals(COMPLETE);
             default:
@@ -821,9 +812,10 @@ public class ARIESRecoveryManager implements RecoveryManager {
                         if(pageLSN<logRecord.LSN&&dirtyPageTable.get(pageNum)<=logRecord.LSN){
                             logRecord.redo(this,diskSpaceManager,bufferManager);
                         }
-                        if(pageLSN>=dirtyPageTable.get(pageNum)){
-                            dirtyPageTable.remove(pageNum);
-                        }
+
+//                        if(pageLSN>=dirtyPageTable.get(pageNum)){
+//                            dirtyPageTable.remove(pageNum);
+//                        }
                     } finally {
                         page.unpin();
                     }

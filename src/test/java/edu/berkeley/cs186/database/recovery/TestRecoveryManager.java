@@ -720,8 +720,8 @@ public class TestRecoveryManager {
 //        while(It.hasNext()){
 //            System.out.println(It.next().toString());
 //        }
-        System.out.println(transactionTable.toString());
-        System.out.println(dirtyPageTable.toString());
+//        System.out.println(transactionTable.toString());
+//        System.out.println(dirtyPageTable.toString());
 
         // 4 Checks for correct transaction table and
         // transaction table after running analysis
@@ -901,7 +901,7 @@ public class TestRecoveryManager {
 
         // check transaction table
         // T1 should have been completed and removed (log #5)
-        System.out.println(transactionTable);
+//        System.out.println(transactionTable);
         assertFalse(transactionTable.containsKey(1L));
         // T2 should have been completed and removed (log #9 sets to committing)
         assertFalse(transactionTable.containsKey(2L));
@@ -1410,14 +1410,14 @@ public class TestRecoveryManager {
         long LSN8 = record.LSN;
 
         record = logs.next();
-        System.out.println(record.toString());
+//        System.out.println(record.toString());
         assertEquals(LogType.UNDO_UPDATE_PAGE, record.getType()); // Undo 6 (T3's write)
         assertEquals(LSN8, (long) record.getPrevLSN().orElseThrow(NoSuchElementException::new));
         assertEquals(LSNs[3], (long) record.getUndoNextLSN().orElseThrow(NoSuchElementException::new));
         long LSN9 = record.LSN;
 
         record = logs.next();
-        System.out.println(record.toString());
+//        System.out.println(record.toString());
         assertEquals(LogType.UNDO_UPDATE_PAGE, record.getType()); // Undo 4 (T2's write)
         assertEquals(LSNs[7], (long) record.getPrevLSN().orElseThrow(NoSuchElementException::new));
         assertEquals(LSNs[1], (long) record.getUndoNextLSN().orElseThrow(NoSuchElementException::new));
